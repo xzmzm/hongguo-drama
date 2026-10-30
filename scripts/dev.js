@@ -57,8 +57,9 @@ async function main() {
   }
 
   // 1. 启动 Vite 开发服务器（strictPort 保证用我们选定的端口）
-  const vite = spawn('npx', ['vite', '--port', String(port), '--strictPort', '--host', '127.0.0.1'], {
-    shell: true,
+  // 直接用 Node 运行本地 Vite 和 Electron，不依赖 npx（只装了 pnpm 时也能用）
+  const viteBin = path.join(path.dirname(require.resolve('vite/package.json')), 'bin', 'vite.js');
+  const vite = spawn(process.execPath, [viteBin, '--port', String(port), '--strictPort', '--host', '127.0.0.1'], {
     stdio: 'inherit',
     env: { ...process.env },
   });
@@ -77,8 +78,9 @@ async function main() {
     process.exit(1);
   }
 
-  const electron = spawn('npx', ['electron', '.'], {
-    shell: true,
+  const electronBin = require('electron'); // 在 Node 中返回 Electron 可执行文件路径
+  const electron = spawn(electronBin, ['.'], {
+    cwd: path.join(__dirname, '..'),
     stdio: 'inherit',
     env: { ...process.env, VITE_DEV_SERVER_URL: `http://localhost:${port}` },
   });
