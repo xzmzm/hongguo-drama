@@ -40,6 +40,10 @@ function checkPermissions() {
   const main = { webContents: { mainFrame: { url } }, isDestroyed: () => false };
   const context = vm.createContext({ app, mainWindow: main,
     rendererSecurity: require('../src/native/renderer-security').createRendererSecurity(entry) });
+  // Window helpers decide which app windows (main + player windows) are trusted.
+  const helpers = source.indexOf('const playerWindows = new Set();');
+  assert.ok(helpers >= 0, 'window trust helpers are missing');
+  vm.runInContext(source.slice(helpers, source.indexOf('const ipcMain = {', helpers)), context);
   const start = source.indexOf("app.on('web-contents-created'");
   assert.ok(start >= 0, 'permission handlers are missing');
   vm.runInContext(source.slice(start, source.indexOf('if (hasSingleInstanceLock) app.whenReady()', start)), context);
@@ -65,6 +69,14 @@ function checkPermissions() {
       assert.equal(allowed, false); assert.equal(check(contents, permission, 'file://', requestDetails), false);
     }
   }
+  // A player window loads the same trusted page and needs fullscreen; untracked windows do not get it.
+  const player = { webContents: { mainFrame: { url: `${url}#player?seriesId=1` } }, isDestroyed: () => false };
+  let allowed; request(player.webContents, 'fullscreen', value => allowed = value, details);
+  assert.equal(allowed, false, 'an untracked window must not get fullscreen');
+  vm.runInContext('playerWindows', context).add(player);
+  request(player.webContents, 'fullscreen', value => allowed = value, details);
+  assert.equal(allowed, true, 'player window needs fullscreen');
+  assert.equal(check(player.webContents, 'media', 'file://', details), false);
 }
 (async () => {
   let failed = 0;

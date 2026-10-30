@@ -46,6 +46,8 @@ const context = vm.createContext({ require: name => name === 'electron' ? electr
 vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: file });
 require('./fixtures/trusted-ipc.cjs')(context, handlers);
 context.sendToRenderer = (name, payload) => events.push({ name, payload: clone(payload) });
+// Navigation goes only to the requesting window; record it like a broadcast.
+context.sendToWindow = (_win, name, payload) => events.push({ name, payload: clone(payload) });
 context.runSearchSniff = keyword => search(keyword);
 const ipc = (name, ...args) => handlers[name]({}, ...args);
 const rows = async () => (await ipc('get-watch-history')).results;

@@ -113,6 +113,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   browseCategories: () => ipcRenderer.invoke('browse-categories'),
   browseList: (options) => ipcRenderer.invoke('browse-list', options),
   playSeries: (payload) => ipcRenderer.invoke('play-series', payload),
+  // 独立播放窗口：同时观看多部短剧
+  openPlayerWindow: (payload) => ipcRenderer.invoke('open-player-window', payload),
+  showMainWindow: (page) => ipcRenderer.invoke('show-main-window', page),
   onNavigate: (cb) => {
     const listener = (_e, data) => cb(data);
     ipcRenderer.on('navigate', listener);

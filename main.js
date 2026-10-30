@@ -78,10 +78,20 @@ let quitCleanup = null;
 let quitReady = false;
 let mergeTempCleanup = null;
 const UPDATE_BLOCKED_CHANNELS = new Set(['hongguo-download-batch', 'download-single-episode', 'retry-task', 'retry-tasks', 'resume-all', 'merge-series', 'transcode-for-playback', 'prepare-online-play', 'save-settings', 'set-boss-key']);
+// 独立播放窗口：同一套界面只显示播放器，可同时看多部剧。
+const playerWindows = new Set();
+const PLAYER_WINDOW_LIMIT = 6;
+function appWindows() {
+  return [mainWindow, ...playerWindows].filter(win => win && !win.isDestroyed());
+}
+// 返回发出请求的受信任窗口（主窗口或播放窗口），否则为 null。
+function trustedWindow(event) {
+  return appWindows().find(win => rendererSecurity.isTrustedSender(event, win)) || null;
+}
 const ipcMain = {
   handle(channel, handler) {
     rawIpcMain.handle(channel, async (event, ...args) => {
-      if (!rendererSecurity.isTrustedSender(event, mainWindow)) throw new Error('窗口请求无效');
+      if (!trustedWindow(event)) throw new Error('窗口请求无效');
       if (quitCleanup) return { success: false, error: '正在退出，请等待清理完成。' };
       if (appUpdateInstaller?.getState().status === 'installing' && UPDATE_BLOCKED_CHANNELS.has(channel)) {
         return { success: false, error: '正在安装更新，请等待应用重新启动。' };
@@ -1106,11 +1116,13 @@ async function executeHongguoDownload(task) {
   }
 }
 
-// 向渲染进程发送事件
+// 向所有应用窗口广播事件（进度类事件带 requestId / id，各窗口自行筛选）
 function sendToRenderer(channel, payload) {
-  if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
-    mainWindow.webContents.send(channel, payload);
-  }
+  for (const win of appWindows()) sendToWindow(win, channel, payload);
+}
+// 只发给某一个窗口（例如导航指令只属于发起请求的窗口）
+function sendToWindow(win, channel, payload) {
+  if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send(channel, payload);
 }
 
 // ===== IPC：红果解析与批量下载 =====
@@ -2515,8 +2527,9 @@ ipcMain.handle('get-playback-position', async (event, seriesId) => {
   return map[sid] || null;
 });
 
-function navigateToPlayer(payload) {
-  sendToRenderer('navigate', {
+// 导航只发给发起请求的窗口，避免其他播放窗口被切走。
+function navigateToPlayer(payload, event) {
+  sendToWindow(trustedWindow(event) || mainWindow, 'navigate', {
     page: 'player',
     payload: {
       seriesId: payload?.seriesId ? String(payload.seriesId) : '',
@@ -2540,7 +2553,7 @@ ipcMain.handle('play-series', async (event, payload) => {
     try { entry.dismissed = false; entry.forgotten = false; saveSeriesRegistry(); }
     catch (error) { entry.dismissed = true; entry.forgotten = wasForgotten; return { success: false, error: error.message }; }
   }
-  return navigateToPlayer({ seriesId, vidIndex, resume: payload?.resume === true });
+  return navigateToPlayer({ seriesId, vidIndex, resume: payload?.resume === true }, event);
 });
 
 // ===== 在线播放 =====
@@ -3030,7 +3043,7 @@ ipcMain.handle('prepare-online-play', async (event, payload) => {
   let quality;
   try { quality = playbackQuality(payload.quality, vid); } catch (error) { return { success: false, error: error.message }; }
   const sourceVid = String(vid), key = onlineCacheKey(sourceVid, quality), streamId = randomUUID();
-  const session = { vid: sourceVid, seriesId: String(seriesId || ''), vidIndex: Number(vidIndex), cacheKey: key, requestId, requests: new Set(), entry: null };
+  const session = { vid: sourceVid, seriesId: String(seriesId || ''), vidIndex: Number(vidIndex), cacheKey: key, requestId, requests: new Set(), entry: null, owner: event?.sender?.id };
   onlineSessions.set(streamId, session);
   try {
     checkCustomAccess(sourceVid);
@@ -3273,7 +3286,7 @@ ipcMain.handle('transcode-for-playback', async (event, payload = {}) => {
     });
     compatPreparing.set(key, job);
   }
-  const request = { key, job, requestId, cancelled: false };
+  const request = { key, job, requestId, cancelled: false, owner: event?.sender?.id };
   job.requests.set(requestId, request);
   compatRequests.set(requestId, request);
   request.promise = job.promise.then(result => ({ ...(request.cancelled ? compatCancelled() : result), requestId })).finally(() => {
@@ -3928,7 +3941,7 @@ async function checkHistoryRow(row, context) {
             if (!mainWindow || mainWindow.isDestroyed()) createWindow();
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.show(); mainWindow.focus();
-            sendToRenderer('navigate', { page: 'history' });
+            sendToWindow(mainWindow, 'navigate', { page: 'history' });
           });
           notification.show();
         } catch (error) { console.warn('[History] 系统通知不可用:', error.message); }
@@ -4049,7 +4062,7 @@ ipcMain.handle('logout-account', async () => {
   return result;
 });
 ipcMain.handle('get-account-history', async (_event, options) => accountAction(service => service.history({ refresh: options?.refresh === true })));
-ipcMain.handle('play-account-history', async (_event, seriesId) => {
+ipcMain.handle('play-account-history', async (event, seriesId) => {
   try {
     const sid = String(seriesId || '');
     if (!/^\d{1,30}$/.test(sid)) return { success: false, error: 'APP 观看记录编号无效' };
@@ -4081,7 +4094,7 @@ ipcMain.handle('play-account-history', async (_event, seriesId) => {
       currentTime: Math.max(0, Number(row.currentTime) || 0),
       updatedAt: Number(row.updatedAt) || Date.now(),
     });
-    return navigateToPlayer({ seriesId: sid, vidIndex: episode.vid_index, resume: true });
+    return navigateToPlayer({ seriesId: sid, vidIndex: episode.vid_index, resume: true }, event);
   } catch (error) {
     accountResumePositions.delete(String(seriesId || ''));
     return { success: false, error: accountSafeMessage(error, '打开 APP 观看记录失败') };
@@ -4780,11 +4793,11 @@ ipcMain.handle('open-app-update', async event => {
 
 // ===== 应用信息 =====
 ipcMain.handle('get-public-details', async (event, seriesId, vid) => {
-  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) return { success: false, error: 'Window unavailable' };
+  if (!trustedWindow(event)) return { success: false, error: 'Window unavailable' };
   return fetchPublicDetails(seriesId, vid);
 });
 ipcMain.handle('get-episode-comments', async (event, options) => {
-  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) return { success: false, error: 'Window unavailable' };
+  if (!trustedWindow(event)) return { success: false, error: 'Window unavailable' };
   return fetchEpisodeComments(options);
 });
 
@@ -4835,13 +4848,15 @@ ipcMain.handle('set-boss-key', (_event, value) => {
   return result;
 });
 app.on('will-quit', () => bossKey.dispose());
+// 界面大小对主窗口和所有播放窗口一致生效。
 function syncMainWindowScale() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const windows = appWindows();
+  if (!windows.length) return;
   const scale = getWindowScale(getCurrentSettings().ui_zoom);
-  mainWindow.webContents.setZoomFactor(scale);
+  for (const win of windows) win.webContents.setZoomFactor(scale);
 }
 function changeMainWindowZoom(direction) {
-  if (!mainWindow || mainWindow.isDestroyed()) return { success: false, error: '主窗口不可用' };
+  if (!appWindows().length) return { success: false, error: '主窗口不可用' };
   try {
     saveWindowZoom(store, direction);
     syncMainWindowScale();
@@ -4865,7 +4880,7 @@ ipcMain.handle('set-stealth-mode', async (event, enabled) => {
     return { success: true };
   } catch (error) { return { success: false, error: error.message }; }
 });
-const episodePanel = createEpisodePanelController({ ipcMain, screen, getMainWindow: () => mainWindow, getLayout: () => windowLayout });
+const episodePanel = createEpisodePanelController({ ipcMain, screen, getMainWindow: () => mainWindow, getLayout: () => windowLayout, getWindowFor: trustedWindow });
 ipcMain.handle('get-window-layout', () => windowLayout);
 ipcMain.handle('set-window-layout', async (event, mode) => {
   if (!mainWindow || event.sender !== mainWindow.webContents || !['portrait', 'landscape'].includes(mode)) {
@@ -4957,7 +4972,7 @@ function createWindow() {
   });
   episodePanel.attach(mainWindow);
   mainWindow.webContents.once('did-finish-load', () => {
-    if (storageError) sendToRenderer('storage-error', storageError);
+    if (storageError) sendToWindow(mainWindow, 'storage-error', storageError);
   });
 
   // 开发模式加载 vite dev server，生产模式加载打包产物
@@ -4976,6 +4991,8 @@ function createWindow() {
     }
   });
   mainWindow.on('closed', () => {
+    // 播放窗口依赖主窗口的缓存与片源会话，随主窗口一起关闭。
+    for (const win of [...playerWindows]) if (!win.isDestroyed()) win.close();
     stealth.dispose();
     if (process.platform === 'darwin' && !contents.isDestroyed()) contents.destroy();
     mediaAccess.clear();
@@ -4985,12 +5002,101 @@ function createWindow() {
   });
 }
 
+// ===== 独立播放窗口 =====
+// 释放某个窗口留下的在线播放会话与转码请求（窗口被直接关闭时渲染层来不及清理）。
+function releaseWindowPlayback(ownerId) {
+  for (const [id, session] of [...onlineSessions]) if (session.owner === ownerId) releaseOnlineSession(id);
+  for (const request of [...compatRequests.values()]) {
+    if (request.owner !== ownerId) continue;
+    request.cancelled = true;
+    if ([...request.job.requests.values()].every(item => item.cancelled)) cancelCompatJob(request.job);
+  }
+}
+
+function playerWindowHash({ seriesId, vidIndex, resume }) {
+  return `player?${new URLSearchParams({ seriesId, vidIndex: String(vidIndex), resume: resume ? '1' : '0' })}`;
+}
+
+function createPlayerWindow(payload) {
+  const anchor = BrowserWindow.getFocusedWindow?.() || mainWindow;
+  const offset = 32 * (playerWindows.size + 1);
+  const bounds = anchor && !anchor.isDestroyed() ? anchor.getBounds() : null;
+  const win = new BrowserWindow({
+    width: 960,
+    height: 680,
+    minWidth: 640,
+    minHeight: 480,
+    ...(bounds ? { x: bounds.x + offset, y: bounds.y + offset } : {}),
+    title: `${APP_TITLE} · 播放`,
+    autoHideMenuBar: true,
+    backgroundColor: '#f5f6fa',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      zoomMode: 'isolated',
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  const ownerId = win.webContents.id;
+  playerWindows.add(win);
+  win.setMenuBarVisibility(false);
+  win.webContents.on('did-finish-load', syncMainWindowScale);
+  win.webContents.on('zoom-changed', (_event, direction) => changeMainWindowZoom(direction));
+  rendererSecurity.protectWindow(win);
+  // 播放窗口也能使用应用自带的画中画小窗。
+  attachFloatingPlayerWindow(win, {
+    BrowserWindow,
+    isTrustedUrl: rendererSecurity.isTrustedUrl,
+    store,
+    screen,
+  });
+  win.webContents.once('did-finish-load', () => {
+    if (storageError) sendToWindow(win, 'storage-error', storageError);
+  });
+  win.on('closed', () => {
+    playerWindows.delete(win);
+    releaseWindowPlayback(ownerId);
+  });
+  const hash = playerWindowHash(payload);
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devUrl) win.loadURL(`${devUrl}#${hash}`);
+  else win.loadFile(path.join(__dirname, 'dist-react', 'index.html'), { hash });
+  return win;
+}
+
+ipcMain.handle('open-player-window', async (_event, payload) => {
+  const seriesId = String(payload?.seriesId || '');
+  const vidIndex = Number(payload?.vidIndex) || 0;
+  if (!seriesId || !Number.isInteger(vidIndex) || vidIndex < 0) return { success: false, error: '剧集信息无效' };
+  if (!seriesRegistry.some(item => String(item.series_id) === seriesId)) {
+    return { success: false, code: 'SERIES_NOT_FOUND', error: '未找到短剧档案，请重新打开详情' };
+  }
+  if (playerWindows.size >= PLAYER_WINDOW_LIMIT) {
+    return { success: false, error: `最多同时打开 ${PLAYER_WINDOW_LIMIT} 个播放窗口，请先关闭一个` };
+  }
+  createPlayerWindow({ seriesId, vidIndex, resume: payload?.resume !== false });
+  return { success: true };
+});
+
+// 播放窗口里的「主窗口」「发现短剧」「设置」等入口：唤起主窗口并切到对应页面。
+const MAIN_WINDOW_PAGES = new Set(['browse', 'feed', 'download', 'player', 'history', 'calendar', 'manager', 'account', 'settings']);
+ipcMain.handle('show-main-window', async (_event, page) => {
+  if (page != null && !MAIN_WINDOW_PAGES.has(page)) return { success: false, error: '页面无效' };
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  if (page) sendToWindow(mainWindow, 'navigate', { page });
+  return { success: true };
+});
+
 // ===== 应用生命周期 =====
 // Remote pages get no permissions; the trusted player keeps fullscreen and clipboard controls.
 app.on('web-contents-created', (_event, contents) => {
   const allowed = (webContents, permission, details) => ['fullscreen', 'clipboard-read', 'clipboard-sanitized-write'].includes(permission)
     && details?.isMainFrame === true && rendererSecurity.isTrustedUrl(details.requestingUrl)
-    && rendererSecurity.isTrustedSender({ sender: webContents, senderFrame: webContents?.mainFrame }, mainWindow);
+    && !!trustedWindow({ sender: webContents, senderFrame: webContents?.mainFrame });
   contents.session.setPermissionRequestHandler((webContents, permission, callback, details) => callback(allowed(webContents, permission, details)));
   contents.session.setPermissionCheckHandler((webContents, permission, _origin, details) => allowed(webContents, permission, details));
 });

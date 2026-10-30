@@ -75,6 +75,11 @@ input::placeholder { color: var(--text-tertiary); }
 .toolbar-caption { color: var(--text-tertiary); font-size: 11px; }
 .main-content { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 34px 36px 48px; }
 .main-content[hidden], [hidden] { display: none !important; }
+/* 独立播放窗口：没有侧栏，留白更紧凑 */
+.player-window .window-toolbar { padding: 0 20px; }
+.player-window .toolbar-location { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-window .toolbar-actions { gap: 8px; flex-shrink: 0; }
+.player-window .main-content { padding: 16px 20px 24px; }
 .app-storage-error { display: flex; align-items: center; gap: 16px; justify-content: space-between; padding: 12px 24px; background: var(--danger-bg); color: var(--danger); }
 .app-storage-error span { min-width: 0; overflow-wrap: anywhere; }
 .browse-container, .hongguo-container, .dm-container, .player-container { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0; }

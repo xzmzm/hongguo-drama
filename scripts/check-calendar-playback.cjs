@@ -28,6 +28,8 @@ function fixture({ exists = true, dismissed = false, saveError = '', resolveErro
     ipcMain: { handle: (_, fn) => { handler = fn; } }, seriesRegistry: registry,
     saveSeriesRegistry: () => { if (saveError) throw new Error(saveError); },
     sendToRenderer: (_, payload) => navigate(payload),
+    // Navigation is sent only to the requesting window.
+    sendToWindow: (_win, _, payload) => navigate(payload), trustedWindow: () => null, mainWindow: null,
   });
   const api = {
     getAppInfo: async () => ({ preview: true }),

@@ -30,7 +30,7 @@ const prefetchKey = (seriesId, vid, quality) => JSON.stringify([String(seriesId 
  *  - 「边下边看」：下一集若还在下载，显示等待态并轮询，下完自动接上
  *  - 断点续播：按 series_id 记住看到第几集、第几秒
  */
-function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, active = true, portrait = false, actionsHidden = false, episodesOpen = false, setEpisodesOpen }) {
+function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitleChange, active = true, portrait = false, actionsHidden = false, episodesOpen = false, setEpisodesOpen }) {
   const enhancement = useVideoEnhancement();
   const [shortcuts, setShortcuts] = useState(readShortcuts);
   const [showDanmakuControls, setShowDanmakuControls] = useState(false);
@@ -107,6 +107,8 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, active
   const [compatCache, setCompatCache] = useState({ files: 0, bytes: 0 });
   const [mergeAsk, setMergeAsk] = useState(false);            // 合并格式选择
   const [mergeError, setMergeError] = useState('');
+  const [windowOpening, setWindowOpening] = useState(false);  // 正在打开独立播放窗口
+  useEffect(() => { onTitleChange?.(detail?.series_title || ''); }, [detail?.series_title, onTitleChange]);
 
   const videoRef = useRef(null);
   const stageRef = useRef(null);
@@ -1366,6 +1368,27 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, active
   }, [active, portrait, episodesOpen, loading, showToast]);
   useEffect(() => () => { window.electronAPI.setEpisodePanelOpen?.(false).catch(() => {}); }, []);
 
+  // 在独立窗口播放某部剧，可与当前窗口同时观看。
+  // 移走的是当前剧时先保存进度并暂停，新窗口从同一位置接着播。
+  const openInNewWindow = async (sid) => {
+    if (windowOpening) return;
+    const isCurrent = String(sid) === String(activeSeriesId);
+    if (isCurrent) {
+      persistPosition(true);
+      videoRef.current?.pause();
+    }
+    setWindowOpening(true);
+    try {
+      const result = await window.electronAPI.openPlayerWindow({ seriesId: String(sid), vidIndex: isCurrent ? currentIndex : 0, resume: true });
+      if (!result?.success) throw new Error(result?.error || '无法打开新窗口，请重试');
+      if (isCurrent) showToast('已在新窗口播放，这里可以切换到另一部剧');
+    } catch (error) {
+      showToast(error.message || '无法打开新窗口，请重试');
+    } finally {
+      setWindowOpening(false);
+    }
+  };
+
   // ===== 渲染 =====
   if (loading) {
     return <div className="player-container"><div className="player-empty">加载中…</div></div>;
@@ -1485,6 +1508,11 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, active
           <span className="series-count">{seriesList.length}</span>
           <ChevronDown size={15} />
         </button>
+          <button className="btn btn-outline player-new-window" disabled={!activeSeriesId || windowOpening}
+            onClick={() => openInNewWindow(activeSeriesId)}
+            title="在独立窗口播放这部剧，可同时打开多部剧一起看">
+            <Layers size={15} />{windowOpening ? '打开中…' : '新窗口播放'}
+          </button>
           <button className="btn btn-outline player-download-jump" aria-controls="player-management"
             onClick={() => {
               if (portrait) setEpisodesOpen(true);
@@ -1547,6 +1575,15 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, active
                       </div>
                     </div>
                     {isActive && <span className="series-row-cur">当前</span>}
+                    {!isActive && (
+                      <button className="btn btn-outline btn-sm series-row-window" disabled={windowOpening}
+                        title={`在新窗口播放《${s.series_title}》，当前播放不受影响`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPickerOpen(false);
+                          openInNewWindow(s.series_id);
+                        }}>新窗口</button>
+                    )}
                     {(() => {
                       const st = storageMap[String(s.series_id)];
                       const hasFiles = st && st.files > 0;
