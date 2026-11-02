@@ -1,0 +1,11 @@
+allowBuilds:
+  electron-winstaller: true
+  esbuild: true
+# Copy package files into node_modules instead of hard-linking them to the
+# pnpm store, so the antivirus exclusion for this folder covers them.
+packageImportMethod: copy
+# Test scripts require these transitive deps (of vite and axios) directly,
+# which works with npm's flat node_modules; expose them for pnpm too.
+publicHoistPattern:
+  - postcss
+  - proxy-from-env
