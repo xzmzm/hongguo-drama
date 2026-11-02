@@ -1,5 +1,9 @@
 # 三端同步发布规则
 
+5.3（内部 `5.3.0`）已于 2026-11-01 10:07（Asia/Shanghai）正式发布，标签 `v5.3`，冻结源码 `4be719b775b4cc92233bde9e9f7790462ba87e2d`。新增下载到 NAS、同层封面/简介/NFO、规范分集命名与复用补齐。三端16附件远端大小和SHA256匹配；双Mac App与DMG四份Apple公证Accepted、签名/装订、DMG只读挂载及更新ZIP恢复通过。源码CI 41262056747、Windows CI 41262074332 通过215单元和100平台检查；Windows便携11项、安装/重装/真实1.80升级资料保留9项通过，EXE未签名。最终arm64包真实两集NAS下载、同层7文件、原生打开目录和静音约10秒播放通过；x64经Rosetta界面启动、正常退出通过。 详见 [5.3说明](release-5.3.md)。
+
+5.2（内部 `5.2.0`）已于 2026-10-31 15:32（Asia/Shanghai）正式发布，标签 `v5.2`，冻结源码 `cadd99f28b6225ff873b5b7a3c836a71a4933730`。修复 macOS 普通主窗口位置和大小恢复。三端16项附件远端SHA256与大小匹配；双Mac App及DMG四份Apple公证Accepted、签名和装订，最终DMG只读挂载与更新ZIP恢复通过；源码CI 41179681402 与Windows CI 41179708157 通过215单元及98平台检查。最终arm64包窗口恢复、随机真实两集静音播放和x64 Rosetta启动退出通过；10个匿名下载入口通过。Windows EXE未签名。 详见 [5.2说明](release-5.2.md)。
+
 5.1（内部 `5.1.0`）已于 2026-10-30 18:20（Asia/Shanghai）正式发布，标签 `v5.1`，冻结源码 `2f241b1dc096b089a060f01e4aca466111a5fbf8`。三端16项附件远端SHA256与大小匹配；双Mac App及DMG完成Developer ID签名、Apple公证Accepted和装订，最终DMG只读挂载与包内匹配通过；源码CI 41037730494 与Windows CI 41037730786 通过。10个匿名下载入口、最终包账号导航、真实素材静音播放与x64 Rosetta启动通过。Windows EXE未签名。 详见 [5.1说明](release-5.1.md)。
 
 5.0（内部 `5.0.0`）已于 2026-10-30 15:21（Asia/Shanghai）正式发布，标签 `v5.0`，冻结源码 `1fa218a196478c9bd3908bea9666bc23f23b921f`。三端 16 项附件及其远端 SHA256、大小匹配；双 Mac App 与 DMG 的 Developer ID 签名、Apple 公证 Accepted、票据装订、最终 DMG 只读挂载及包内文件匹配通过；源码 CI 41016309687 与 Windows CI 41016337531 均通过；10 个匿名下载入口、Mac x64 Rosetta 启动、真实素材播放和观看记录界面验收通过。Windows EXE 未签名。 详见 [5.0说明](release-5.0.md)。
