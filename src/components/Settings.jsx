@@ -157,7 +157,7 @@ function SettingsPage({ active = true, preview = false, appInfo = null }) {
     setSaveError('');
     try {
       // Submit only edited fields; the main process merges newer playback options.
-      const editable = ['root', 'name_format', 'download_quality', 'cache_next_episode', 'compat_mode', 'auto_delete_watched', 'show_danmaku_controls', 'max_concurrent', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'app_updates_enabled'];
+      const editable = ['root', 'name_format', 'download_quality', 'cache_next_episode', 'compat_mode', 'auto_delete_watched', 'show_danmaku_controls', 'max_concurrent', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'fast_cdn_host', 'app_updates_enabled'];
       const submitted = {};
       for (const key of editable) {
         if (Object.hasOwn(next, key) && (editedKeys.current.has(key) || isProxy && key.startsWith('proxy_'))) submitted[key] = next[key];
@@ -273,6 +273,7 @@ function SettingsPage({ active = true, preview = false, appInfo = null }) {
           <label className="proxy-switch-row"><input type="checkbox" checked={settings.compat_mode !== false} onChange={event => update('compat_mode', event.target.checked)} /><span className="proxy-switch-text">自动兼容模式<em>无法解码时尝试转码播放，解决部分黑屏有声问题。</em></span></label>
           <label className="proxy-switch-row"><input type="checkbox" checked={settings.auto_delete_watched === true} onChange={event => update('auto_delete_watched', event.target.checked)} /><span className="proxy-switch-text">看完自动删除<em>看完一集后删除该集已下载的视频、在线播放缓存和转码缓存。下载文件会永久删除；需要时可重新下载。保存后生效。</em></span></label>
           <label className="proxy-switch-row"><input type="checkbox" aria-label="优先使用红果 App 搜索" checked={settings.search_app_enabled === true} onChange={event => update('search_app_enabled', event.target.checked)} /><span className="proxy-switch-text">优先使用红果 App 搜索<em>失败或空结果自动回退官网；关闭此项时，官网不可用仍会尝试 App 备用搜索。</em></span></label>
+          <label className="proxy-switch-row"><input type="checkbox" aria-label="海外视频加速线路" checked={settings.fast_cdn_host === true} onChange={event => update('fast_cdn_host', event.target.checked)} /><span className="proxy-switch-text">海外视频加速线路<em>在线播放和下载优先改用官方 App 的视频线路（fqnovelvod.com），在海外通常明显更快；失败时自动回退原地址。保存后生效。</em></span></label>
         </div>
         <div className="settings-group">
           <span className="settings-label">弹幕按钮设置</span>

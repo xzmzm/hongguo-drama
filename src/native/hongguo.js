@@ -634,11 +634,48 @@ async function fetchPlayUrlSingle(vid, sid, options = {}) {
       }), options);
     // Last-resort web recovery must not replace App priority during the penalty window.
     if (skipWeb && result.source === 'web' && responseCache.get(cacheKey)?.value === result) responseCache.delete(cacheKey);
-    return result;
+    return fastCdnEnabled() ? preferFastCdn(result) : result;
   } catch (error) {
     return { url: null, spadeA: null, codec: null, error: error.message,
       ...(error.code === 'SOURCE_UNAVAILABLE' ? { code: error.code, sources: error.sources } : {}) };
   }
+}
+
+// Outside mainland China, the Singapore edge for v3-reading-video.qznovelvod.com is heavily
+// throttled, while the sibling fqnovelvod.com host (the one the official App streams from)
+// serves the same signed path and bytes much faster. Opt-in via settings.fast_cdn_host.
+const FAST_CDN_HOSTS = { 'v3-reading-video.qznovelvod.com': 'v3-reading-video.fqnovelvod.com' };
+
+function fastCdnEnabled() {
+  try { return require('../store').getSettings()?.fast_cdn_host === true; }
+  catch (_) { return false; }
+}
+
+function fastCdnUrl(raw) {
+  try {
+    const url = new URL(raw);
+    const host = FAST_CDN_HOSTS[url.hostname];
+    if (!host || url.protocol !== 'https:') return null;
+    url.hostname = host;
+    return url.href;
+  } catch (_) { return null; }
+}
+
+/** Try the fast host first for each candidate, keeping the original URL as fallback. */
+function preferFastCdn(result) {
+  if (!result?.url) return result;
+  const strip = ({ variants, candidates, ...rest }) => rest;
+  const list = [result, ...(result.variants || result.candidates || [])].map(strip);
+  const out = [];
+  const seen = new Set();
+  const push = item => { if (!seen.has(item.url)) { seen.add(item.url); out.push(item); } };
+  for (const item of list) {
+    const fast = fastCdnUrl(item.url);
+    if (fast) push({ ...item, url: fast, fastCdn: true });
+    push(item);
+  }
+  if (!out.some(item => item.fastCdn)) return result;
+  return { ...out[0], variants: out };
 }
 
 function sourceFailure(source, error) {
@@ -1140,4 +1177,5 @@ module.exports = {
   WEB_UA,
   WEB_REFERER,
   markWebMediaFailure,
+  preferFastCdn,
 };

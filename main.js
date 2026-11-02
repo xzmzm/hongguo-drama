@@ -256,6 +256,8 @@ function getDefaultSettings() {
     watch_notifications_enabled: false,
     // 实验：红果 App 搜索优先；失败/空结果自动回退官网 API。
     search_app_enabled: false,
+    // 海外加速：在线播放/下载优先改用 fqnovelvod.com 线路，失败自动回退原地址。
+    fast_cdn_host: false,
     // ===== 网络代理 =====
     // proxy_enabled: 是否启用代理（关闭时忽略系统代理，直连）
     // proxy_mode:    system=跟随系统/环境变量 · custom=手动指定 · direct=强制直连
@@ -4341,7 +4343,7 @@ ipcMain.handle('select-folder', async () => {
   return result.filePaths[0];
 });
 
-const SETTINGS_KEYS = ['root', 'name_format', 'max_concurrent', 'download_quality', 'export_text', 'auto_delete_watched', 'compat_mode', 'cache_next_episode', 'picture_in_picture_mode', 'show_danmaku_controls', 'app_updates_enabled', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'];
+const SETTINGS_KEYS = ['root', 'name_format', 'max_concurrent', 'download_quality', 'export_text', 'auto_delete_watched', 'compat_mode', 'cache_next_episode', 'picture_in_picture_mode', 'show_danmaku_controls', 'app_updates_enabled', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'fast_cdn_host', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'];
 
 function normalizeTextExportKinds(value) {
   return { danmaku: value?.danmaku === true, comments: value?.comments === true, reviews: value?.reviews === true };
