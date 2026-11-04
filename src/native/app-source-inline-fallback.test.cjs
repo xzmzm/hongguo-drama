@@ -56,6 +56,29 @@ test('complete inline metadata does not request fallback', async () => {
     assert.equal(f.calls.length, 1);
 });
 
+test('ByteVC2-only episodes retain the codec and validated dimensions for conversion', async () => {
+    const f = fixture(model({ video_list: [{ ...row(1080, { encrypt: false }), codec_type: 'bytevc2' }] }), null);
+    const result = await f.fetch();
+    assert.equal(result.codec, 'bytevc2');
+    assert.equal(result.width, 1080);
+    assert.equal(result.height, 2160);
+    assert.equal(result.duration, 56.007);
+    assert.equal(f.calls.length, 1);
+});
+
+test('normal codecs stay preferred when a ByteVC2 rendition is also present', async () => {
+    const f = fixture(model({ video_list: [{ ...row(1080, { encrypt: false }), codec_type: 'bytevc2' }, row(720, { encrypt: false })] }), null);
+    assert.equal((await f.fetch()).codec, 'h264');
+});
+
+for (const overrides of [{ video_id: undefined }, { video_duration: 0 }, { video_duration: undefined },
+    { video_list: [{ ...row(1080, { encrypt: false }), vwidth: 0, codec_type: 'bytevc2' }] }]) {
+    test('ByteVC2 conversion requires complete identity, duration and actual dimensions: ' + JSON.stringify(overrides), async () => {
+        const f = fixture(model({ video_list: [{ ...row(1080, { encrypt: false }), codec_type: 'bytevc2' }], ...overrides }), null);
+        await assert.rejects(f.fetch());
+    });
+}
+
 test('verified fallback decodes key_seed URLs and preserves validated backups', async () => {
     const seed = Buffer.alloc(16, 7);
     const constants = Buffer.from('4dd4c2e6b83162090e52b3c7a6733ba41cb2462b829ab58a196b39db57177524f49baf7f08e8d68d26a72e37c1a95a2f1f05a51892aef2949732b62a38aadd58', 'hex');

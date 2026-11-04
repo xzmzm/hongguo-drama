@@ -21,6 +21,16 @@ const PREFETCH_RETRY_MS = 15 * 1000;
 // 播放期间最多预取后续两集；跳到更远时再按新位置补齐。
 const PREFETCH_AHEAD = 2;
 const AUTO_ONLINE_QUALITIES = ['1080p', '720p', 'auto'];
+const PLAYBACK_PREFERENCES_KEY = 'hongguo:playback-preferences';
+const readPlaybackPreferences = () => {
+  let saved;
+  try { saved = JSON.parse(window.localStorage.getItem(PLAYBACK_PREFERENCES_KEY)); } catch {}
+  return {
+    rate: Number.isFinite(saved?.rate) && saved.rate >= 0.25 && saved.rate <= 4 ? saved.rate : 1,
+    volume: Number.isFinite(saved?.volume) && saved.volume >= 0 && saved.volume <= 1 ? saved.volume : 0.5,
+    muted: saved?.muted === true,
+  };
+};
 
 const prefetchKey = (seriesId, vid, quality) => JSON.stringify([String(seriesId || ''), String(vid || ''), quality || 'auto']);
 
@@ -67,7 +77,8 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
   const [autoNext, setAutoNext] = useState(true);
   const [autoAdvancing, setAutoAdvancing] = useState(false);
   const [cacheNext, setCacheNext] = useState(true);
-  const [playbackRate, setPlaybackRate] = useState(1);
+  const [playbackPreferences] = useState(readPlaybackPreferences);
+  const [playbackRate, setPlaybackRate] = useState(playbackPreferences.rate);
   const [downloadQuality, setDownloadQuality] = useState('auto');
   const [onlineQualityChoice, setOnlineQualityChoice] = useState(() => {
     try { const value = window.localStorage.getItem('hongguo:online-quality'); return ['720p', '1080p', 'compat'].includes(value) ? value : 'auto'; }
@@ -116,7 +127,12 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
   const stageRef = useRef(null);
   const downloadToolsRef = useRef(null);
   const fullscreenScrollRef = useRef(null);
-  const playbackRateRef = useRef(1);
+  const playbackRateRef = useRef(playbackPreferences.rate);
+  const preferredRateRef = useRef(playbackPreferences.rate);
+  const volumeRef = useRef(playbackPreferences.volume);
+  const mutedRef = useRef(playbackPreferences.muted);
+  const videoClickTimer = useRef(null);
+  const fastForwardRef = useRef(null);
   const toastTimer = useRef(null);
   const rateNoticeTimer = useRef(null);
   const mergeRequestRef = useRef(false);
@@ -277,11 +293,21 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
-  const changePlaybackRate = useCallback((value, notify = true) => {
+  const savePlaybackPreferences = useCallback(() => {
+    try { window.localStorage.setItem(PLAYBACK_PREFERENCES_KEY, JSON.stringify({ rate: preferredRateRef.current, volume: volumeRef.current, muted: mutedRef.current })); }
+    catch { showToast('播放偏好已生效，但未能保存；下次打开可能恢复默认'); }
+  }, [showToast]);
+
+  const changePlaybackRate = useCallback((value, notify = true, persist = true) => {
     const rate = Number(value);
     if (!Number.isFinite(rate)) return;
     const next = Math.max(0.25, Math.min(4, rate));
     playbackRateRef.current = next;
+    if (persist) {
+      preferredRateRef.current = next;
+      if (fastForwardRef.current) fastForwardRef.current.rate = next;
+      savePlaybackPreferences();
+    }
     setPlaybackRate(next);
     const v = videoRef.current;
     if (v) {
@@ -293,7 +319,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
       clearTimeout(rateNoticeTimer.current);
       rateNoticeTimer.current = setTimeout(() => setRateNotice(null), 1800);
     }
-  }, []);
+  }, [savePlaybackPreferences]);
 
   // 载入已登记的剧集列表
   const loadSeriesList = useCallback(async () => {
@@ -614,7 +640,10 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
 
   useEffect(() => {
     const v = videoRef.current;
-    if (loading || !canPlay || !v) return;
+    if (!v) return;
+    v.volume = volumeRef.current;
+    v.muted = mutedRef.current;
+    if (loading || !canPlay) return;
     const previous = lastLoadRef.current;
     lastLoadRef.current = { source: videoSrc, version: playbackVersion };
     v.defaultPlaybackRate = playbackRateRef.current;
@@ -1123,11 +1152,26 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
     } catch { restoreFullscreenScroll(); showToast('无法进入或退出全屏，请重试'); }
   }, [portrait, floatingPlayer.floating, showToast, restoreFullscreenScroll]);
 
+  useEffect(() => () => clearTimeout(videoClickTimer.current), [videoSrc]);
+
   // Capture handled keys before media controls; cancel keyup too so focused buttons cannot toggle twice.
   useEffect(() => {
     if ((!active && !floatingPlayer.floating) || confirmAsk || mergeAsk || pickerOpen) return;
     const keyboardWindow = stageRef.current?.ownerDocument?.defaultView || window;
     const held = new Set();
+    const finishForward = (seek = false) => {
+      const press = fastForwardRef.current;
+      if (!press) return;
+      fastForwardRef.current = null;
+      clearTimeout(press.timer);
+      if (press.active) changePlaybackRate(press.rate, false, false);
+      else if (seek && videoRef.current) {
+        const video = videoRef.current;
+        const limit = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : Infinity;
+        try { video.currentTime = Math.min(limit, video.currentTime + 5); }
+        catch { showToast('暂时无法跳转，请稍后重试'); }
+      }
+    };
     const onKey = (event) => {
       const video = videoRef.current;
       if (!video || event.defaultPrevented || ignoresPlaybackShortcut(event.target, event.key)) return;
@@ -1136,6 +1180,14 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
       if (!action) return;
       event.preventDefault(); event.stopPropagation?.();
       held.add(event.code || event.key);
+      if (action.id === 'forward') {
+        if (!fastForwardRef.current && !event.repeat) {
+          const press = { key: event.code || event.key, rate: playbackRateRef.current, active: false };
+          fastForwardRef.current = press;
+          press.timer = setTimeout(() => { press.active = true; changePlaybackRate(2, true, false); }, 300);
+        }
+        return;
+      }
       if (event.repeat && !action.repeat) return;
       const { currentIndex: index, autoNext: nextEnabled } = stateRef.current;
       if (action.id === 'play') {
@@ -1156,8 +1208,9 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
     const onKeyUp = event => {
       if (!held.delete(event.code || event.key)) return;
       event.preventDefault(); event.stopPropagation?.();
+      if (fastForwardRef.current?.key === (event.code || event.key)) finishForward(true);
     };
-    const onBlur = () => held.clear();
+    const onBlur = () => { held.clear(); finishForward(); };
     keyboardWindow.addEventListener('keydown', onKey, true);
     keyboardWindow.addEventListener('keyup', onKeyUp, true);
     keyboardWindow.addEventListener('blur', onBlur);
@@ -1165,6 +1218,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
       keyboardWindow.removeEventListener('keydown', onKey, true);
       keyboardWindow.removeEventListener('keyup', onKeyUp, true);
       keyboardWindow.removeEventListener('blur', onBlur);
+      finishForward();
     };
   }, [active, floatingPlayer.floating, confirmAsk, mergeAsk, pickerOpen, findNext, findPrev, goToEpisode, changePlaybackRate, showToast, shortcuts, toggleFullscreen]);
 
@@ -1699,13 +1753,17 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
             aria-busy={!canPlay || mediaBuffering}
             tabIndex={0}
             aria-label={`视频画面，${formatShortcut(shortcuts.play)}播放或暂停`}
-            onClick={() => {
+            onClick={(event) => {
               const video = videoRef.current;
-              if (!canPlay || !video) return;
+              if (!canPlay || !video || event.detail > 1) return;
               video.focus({ preventScroll: true });
-              if (video.paused) video.play().catch(() => showToast('暂时无法播放，请重试本集'));
-              else video.pause();
+              clearTimeout(videoClickTimer.current);
+              videoClickTimer.current = setTimeout(() => {
+                if (video.paused) video.play().catch(() => showToast('暂时无法播放，请重试本集'));
+                else video.pause();
+              }, 300);
             }}
+            onDoubleClick={() => { clearTimeout(videoClickTimer.current); if (canPlay) return toggleFullscreen(); }}
             onLoadedMetadata={handleMetadata}
             onTimeUpdate={prepareNextEpisode}
             onPlay={(event) => {
@@ -1720,6 +1778,14 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
               if (!canPlay || v !== videoRef.current || v.readyState === 0 || loadedMediaRef.current?.version !== mediaVersion.current) return;
               if (v.currentSrc && v.currentSrc !== videoSrc) return;
               if (v.playbackRate !== playbackRateRef.current) changePlaybackRate(v.playbackRate);
+            }}
+            onVolumeChange={(event) => {
+              const v = event.currentTarget;
+              if (v !== videoRef.current || !Number.isFinite(v.volume) || v.volume < 0 || v.volume > 1) return;
+              if (v.volume === volumeRef.current && v.muted === mutedRef.current) return;
+              volumeRef.current = v.volume;
+              mutedRef.current = v.muted;
+              savePlaybackPreferences();
             }}
             onEnded={() => { if (activeRef.current && canPlay && playbackVersion === mediaVersion.current && (!videoRef.current || loadedMediaRef.current?.version === mediaVersion.current)) handleEnded(); }}
             onPause={() => persistPosition(true)}
@@ -1784,13 +1850,13 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
             ) : onlineProgress && onlineProgress.vid && (!current || current.vid === onlineProgress.vid) ? (
               <>
                 <RefreshCw size={30} className="spin" />
-                <p>{onlineProgress.phase === 'preparing' ? '正在连接片源…' : onlineProgress.phase === 'decrypting' ? '正在准备播放…' : '正在缓冲在线播放…'}</p>
+                <p>{onlineProgress.phase === 'preparing' ? '正在连接片源…' : onlineProgress.phase === 'transcoding' ? '正在转换为可播放格式…' : onlineProgress.phase === 'decrypting' ? '正在准备播放…' : '正在缓冲在线播放…'}</p>
                 {onlineProgress.phase !== 'preparing' && <div className="player-wait-bar">
                   <div className="player-wait-fill" style={{ width: `${onlineProgress.percent || 0}%` }} />
                 </div>}
                 <span className="player-placeholder-sub">
                   {onlineProgress.phase === 'preparing' ? '获取可播放地址' : `${onlineProgress.percent || 0}%`}
-                  {onlineProgress.total ? ` · ${(onlineProgress.received / 1048576).toFixed(1)} / ${(onlineProgress.total / 1048576).toFixed(1)} MB` : ''}
+                  {onlineProgress.total && onlineProgress.phase !== 'transcoding' ? ` · ${(onlineProgress.received / 1048576).toFixed(1)} / ${(onlineProgress.total / 1048576).toFixed(1)} MB` : ''}
                   {' · 不写入下载目录'}
                 </span>
                 <button className="btn btn-outline" onClick={() => stopPlayback()}>取消播放</button>

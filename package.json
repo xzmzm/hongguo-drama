@@ -1,6 +1,6 @@
 {
   "name": "hongguo-downloader",
-  "version": "5.5.0",
+  "version": "5.7.0",
   "description": "红果短剧播放与下载",
   "main": "main.js",
   "license": "GPL-3.0",
@@ -58,7 +58,7 @@
       "src/store.js"
     ],
     "asar": true,
-    "artifactName": "hongguo-downloader-5.5-${os}-${arch}.${ext}",
+    "artifactName": "hongguo-downloader-5.7-${os}-${arch}.${ext}",
     "win": {
       "target": [
         {
@@ -77,6 +77,8 @@
           "filter": [
             "ffmpeg.exe",
             "ffprobe.exe",
+            "librempeg.exe",
+            "LIBREMPEG-*",
             "WINDOWS-*.txt",
             "COPYING.*",
             "LICENSE.md"
@@ -99,7 +101,7 @@
       ]
     },
     "portable": {
-      "artifactName": "${productName}-5.5-便携版.${ext}"
+      "artifactName": "${productName}-5.7-便携版.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -107,7 +109,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "红果短剧下载器",
-      "artifactName": "hongguo-downloader-5.5-win-x64-setup.${ext}"
+      "artifactName": "hongguo-downloader-5.7-win-x64-setup.${ext}"
     },
     "mac": {
       "target": [
@@ -139,7 +141,8 @@
           "to": "bin",
           "filter": [
             "ffmpeg",
-            "ffprobe"
+            "ffprobe",
+            "librempeg"
           ]
         },
         {
@@ -148,7 +151,8 @@
           "filter": [
             "COPYING.*",
             "LICENSE.md",
-            "MACOS-*.txt"
+            "MACOS-*.txt",
+            "LIBREMPEG-*"
           ]
         },
         {
@@ -170,7 +174,8 @@
       ],
       "binaries": [
         "Contents/Resources/bin/ffmpeg",
-        "Contents/Resources/bin/ffprobe"
+        "Contents/Resources/bin/ffprobe",
+        "Contents/Resources/bin/librempeg"
       ]
     },
     "publish": {
