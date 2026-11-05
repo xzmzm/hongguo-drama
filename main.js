@@ -1,5 +1,5 @@
 /**
- * main.js - 红果短剧 5.4 下载器（独立版）主进程
+ * main.js - 红果短剧 5.9 下载器（独立版）主进程
  *
  * 功能：
  *   1. 红果短剧解析（分享链接 / series_id -> 全剧集列表）
@@ -46,6 +46,7 @@ const { randomUUID, createHash } = require('node:crypto');
 const hongguo = require('./src/native/hongguo');
 const { normalizeDownloadQuality, meetsDownloadQuality } = require('./src/native/download-quality');
 const { decryptInWorker } = require('./src/native/decrypt-worker.cjs');
+const { convertBytevc2 } = require('./src/native/bytevc2');
 const store = require('./src/store');
 const watchHistory = require('./src/native/watch-history');
 const { createAccountService, safeMessage: accountSafeMessage } = require('./src/native/account-session');
@@ -243,6 +244,7 @@ function getDefaultSettings() {
     max_concurrent: 3,
     ui_zoom: 1,
     download_quality: 'auto',
+    download_metadata: false,
     custom_sources: [],
     // 看完一集后自动删除本地文件（边看边清，避免占用磁盘）
     auto_delete_watched: false,
@@ -752,8 +754,31 @@ const SOURCE_RETRY_DELAYS = [3, 8, 15].map(minutes => minutes * 60000);
 const TRANSFER_RETRY_DELAYS = [10, 30, 60].map(seconds => seconds * 1000);
 const sourceRetryTimers = new Map();
 
+function isDownloadSourceRejection(error) {
+  return error?.code === 'DEVICE_REGISTRATION_FAILED' || error?.code === 'SOURCE_UNAVAILABLE'
+    && Array.isArray(error.sources) && error.sources.some(item => item.source === 'app'
+      && /^(?:DEVICE_REGISTRATION_FAILED|HTTP_(?:403|429))$/.test(item.code));
+}
+
+function pausePendingHongguoTasks() {
+  const paused = [];
+  for (const task of downloadTasks) {
+    if (task.type !== 'hongguo' || !/^\d{1,30}$/.test(String(task.hongguoInfo?.vid || ''))
+      || runningDownloads.has(task.id) || !(task.status === 'pending'
+        || task.status === 'failed' && (task.retryAt || sourceRetryTimers.has(task.id)))) continue;
+    delete task.retryAt; delete task.sourceRetries;
+    task.status = 'stopped'; task.cancelled = true; task.endTime = Date.now();
+    task.error = '匿名设备注册失败或 App 取源被拒绝，已暂停后续下载；请手动重试，上游恢复时间无法确认';
+    paused.push(task);
+  }
+  downloadQueue = downloadQueue.filter(task => task.status === 'pending');
+  return paused;
+}
+
 function sourceFailureIsTransient(error) {
   const sources = Array.isArray(error?.sources) ? error.sources : [];
+  // A timeout on another route cannot repair an explicit App/device rejection.
+  if (sources.some(item => item.source === 'app' && /^(?:DEVICE_REGISTRATION_FAILED|HTTP_(?:403|429)|BUSINESS_REJECTED|SECURITY_BLOCKED)$/.test(item.code))) return false;
   return sources.some(item =>
     (item.source === 'web' && /^HTTP_(?:404|410)$/.test(item.code))
     || /^(?:TIMEOUT|NETWORK_ERROR|HTTP_(?:408|5\d\d))$/.test(item.code));
@@ -822,37 +847,23 @@ function cancelScheduledRetries(tasks) {
  * 返回被暂停的任务数。
  */
 function pauseAllTasks() {
-  let stopped = 0;
-  for (const task of downloadTasks) {
-    if (task.status === 'failed' && task.retryAt) {
-      clearSourceRetry(task);
-      task.status = 'stopped';
-      task.error = '已手动暂停';
-      stopped++;
-    } else if (task.status === 'pending') {
-      clearSourceRetry(task);
-      task.status = 'stopped';
-      task.error = '已手动暂停';
-      task.endTime = Date.now();
-      stopped++;
-    } else if (task.status === 'downloading') {
-      task.cancelled = true;
-      if (task.cancelSource) {
-        try { task.cancelSource.cancel('用户一键暂停'); } catch (_) {}
-      }
-      if (task.writer) {
-        try { task.writer.destroy(); } catch (_) {}
-      }
-      task.status = 'stopped';
-      delete task.cancelSource;
-      delete task.writer;
-      stopped++;
-    }
+  const tasks = downloadTasks.filter(task => ['pending', 'downloading'].includes(task.status) || task.status === 'failed' && task.retryAt);
+  const snapshot = snapshotQueueTasks(tasks);
+  for (const task of tasks) {
+    task.status = 'stopped'; task.error = '已手动暂停'; task.endTime = Date.now(); task.cancelled = true;
+    delete task.retryAt; delete task.sourceRetries;
   }
   downloadQueue = [];
-  saveDownloadTasks();
+  try { saveDownloadTasks(); }
+  catch (error) { restoreQueueTasks(snapshot); throw error; }
+  for (const task of tasks) {
+    clearSourceRetry(task);
+    try { task.cancelSource?.cancel('用户一键暂停'); } catch (_) {}
+    try { task.writer?.destroy(); } catch (_) {}
+    delete task.cancelSource; delete task.writer;
+  }
   sendToRenderer('download-queue-changed', {});
-  return stopped;
+  return tasks.length;
 }
 
 /**
@@ -1008,13 +1019,21 @@ async function executeHongguoDownload(task) {
     };
     const root = String(settings.root || '').trim() || app.getPath('downloads');
     const downloadDir = task.customDir || seriesDownloadDir(root, hongguoInfo?.series_id, series_title);
+    const finalPath = task.savePath || path.join(downloadDir, filename);
+    task.savePath = finalPath;
+    task.customDir ||= downloadDir;
     if (task.nasDestination) {
       if (task.pathConflict) throw new Error('NAS 文件路径与其他分集冲突，请检查所选文件夹后重试');
       await checkNasDirectory(task.nasDestination);
     }
-    else fs.mkdirSync(downloadDir, { recursive: true });
-    const finalPath = task.savePath || path.join(downloadDir, filename);
-    task.savePath = finalPath;
+    else {
+      if (task.directoryIdentity) validateDirectoryIdentity(task.directoryIdentity, task.savePath || path.join(downloadDir, filename));
+      fs.mkdirSync(downloadDir, { recursive: true });
+      if (!task.directoryIdentity) {
+        task.directoryIdentity = readDirectoryIdentity(downloadDir);
+        if (downloadTasks.includes(task)) saveDownloadTasks();
+      }
+    }
     // Recheck source access before reusing an existing third-party file or URL.
     const checkedPlayInfo = /^(xifan|hema|custom):/.test(String(vid))
       ? await hongguo.fetchPlayUrlSingle(vid, hongguoInfo?.series_id, { quality }) : null;
@@ -1084,10 +1103,22 @@ async function executeHongguoDownload(task) {
       await pipeline(response.data, writer);
       source.token.throwIfRequested();
       if (!received || (totalLength && received !== totalLength)) throw mediaTransferError('视频下载不完整，请重试');
-      if (playInfo.contentKey) {
+      if (playInfo.contentKey || playInfo.codec === 'bytevc2') {
         const decodedPath = tmpPath + '.decoded';
         try {
-          await decryptContentKeyFile(tmpPath, decodedPath, playInfo.contentKey, { cancelToken: source.token });
+          if (playInfo.codec === 'bytevc2') {
+            const notice = task.qualityNotice;
+            const progress = seconds => {
+              task.progress = Math.min(99, Math.floor(seconds / playInfo.duration * 100));
+              task.qualityNotice = '正在转换为可播放格式';
+              sendToRenderer('download-progress', { id, progress: task.progress, qualityNotice: task.qualityNotice });
+            };
+            progress(0);
+            try {
+              await convertBytevc2({ executable: resolveFfmpeg('librempeg'), input: tmpPath, output: decodedPath,
+                contentKey: playInfo.contentKey, duration: playInfo.duration, cancelToken: source.token, onProgress: progress });
+            } finally { task.qualityNotice = notice || ''; }
+          } else await decryptContentKeyFile(tmpPath, decodedPath, playInfo.contentKey, { cancelToken: source.token });
           task.actualQuality = await verifyReceived(decodedPath);
           source.token.throwIfRequested();
           publishDownloadFile(decodedPath, finalPath);
@@ -1120,6 +1151,7 @@ async function executeHongguoDownload(task) {
   } catch (error) {
     if (writer && !writer.destroyed) writer.destroy();
     if (tmpPath) { try { fs.unlinkSync(tmpPath); } catch (_) {} }
+    let paused = [];
     task.qualityNotice = '';
     // A retry may already be queued; the cancelled old run must not overwrite it.
     if (source.token.reason || axios.isCancel(error) || task.cancelled) {
@@ -1130,7 +1162,8 @@ async function executeHongguoDownload(task) {
     } else {
       const retries = task.sourceRetries || 0;
       task.status = 'failed'; task.error = error.message; task.endTime = Date.now();
-      if (retries < SOURCE_RETRY_DELAYS.length && isDeferrableSourceError(task, error)) {
+      if (/^\d{1,30}$/.test(String(vid)) && isDownloadSourceRejection(error)) paused = pausePendingHongguoTasks();
+      else if (retries < SOURCE_RETRY_DELAYS.length && isDeferrableSourceError(task, error)) {
         const delays = error.code === 'SOURCE_UNAVAILABLE' || [404, 410].includes(error.mediaStatus)
           ? SOURCE_RETRY_DELAYS : TRANSFER_RETRY_DELAYS;
         const delay = delays[retries];
@@ -1142,6 +1175,7 @@ async function executeHongguoDownload(task) {
       sendToRenderer('download-failed', { id, error: task.error, retryAt: task.retryAt || null, sourceRetries: task.sourceRetries || 0, qualityNotice: '' });
     }
     saveDownloadTasks();
+    for (const task of paused) clearSourceRetry(task);
   } finally {
     if (task.cancelSource === source) delete task.cancelSource;
     if (task.writer === writer) delete task.writer;
@@ -1937,6 +1971,7 @@ function rescanDownloadsFromDisk() {
         batchId: 'rescanned',
         savePath: f.path,
         customDir: scanned.dir,
+        directoryIdentity: readDirectoryIdentity(path.dirname(f.path)),
         filename: f.filename,
         title: `《${s.series_title}》第${String(f.vid_index).padStart(3, '0')}集`,
         platform: 'hongguo',
@@ -2107,6 +2142,22 @@ function pathInside(root, target) {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
 }
 
+function readDirectoryIdentity(directory) {
+  directory = fs.realpathSync(directory);
+  const stat = fs.statSync(directory);
+  if (!stat.isDirectory()) throw new Error('下载目录不可用');
+  return { directory, device: stat.dev };
+}
+
+function validateDirectoryIdentity(identity, file) {
+  try {
+    const stat = fs.lstatSync(identity.directory);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || stat.dev !== identity.device
+      || fs.realpathSync(identity.directory) !== identity.directory
+      || fs.realpathSync(path.dirname(file)) !== identity.directory) throw new Error();
+  } catch (_) { throw new Error('下载目录不可用或挂载已变化，已保留文件和任务记录；请确认原目录后重试'); }
+}
+
 function mediaRoots() {
   const roots = [];
   try {
@@ -2158,6 +2209,22 @@ ipcMain.handle('show-in-folder', async (event, filePath) => {
   }
 });
 
+ipcMain.handle('open-episode-external', async (_event, seriesId, vidIndex) => {
+  try {
+    const task = downloadTasks.find(item => item.status === 'completed'
+      && String(item.hongguoInfo?.series_id) === String(seriesId)
+      && Number(item.hongguoInfo?.vid_index) === Number(vidIndex) && hasCompleteTaskFile(item));
+    if (!task || !/\.mp4$/i.test(task.savePath)
+      || !isRecordedMediaFile(task.savePath, { seriesId, vidIndex, vid: task.hongguoInfo.vid })) {
+      return { success: false, error: '请先完整下载本集，再使用系统播放器打开' };
+    }
+    const error = await shell.openPath(task.savePath);
+    return error ? { success: false, error: '无法打开系统播放器，请检查 MP4 的默认打开方式' } : { success: true };
+  } catch {
+    return { success: false, error: '无法打开系统播放器，请检查文件和默认打开方式' };
+  }
+});
+
 ipcMain.handle('get-merge-tasks', async () => mergeTasks.map(({ child, ...rest }) => rest));
 
 function seriesDownloadDir(root, seriesId, seriesTitle) {
@@ -2204,6 +2271,7 @@ function repairTaskDestination(task) {
   const suffix = createHash('sha256').update(String(info.vid)).digest('hex').slice(0, 8);
   task.filename = filename.replace(/\.mp4$/, `-${suffix}.mp4`);
   task.savePath = path.join(task.customDir, task.filename);
+  if (task.directoryIdentity && path.resolve(task.customDir) !== path.resolve(task.directoryIdentity.directory)) delete task.directoryIdentity;
   task.pathConflict = false;
 }
 
@@ -2704,7 +2772,7 @@ async function withMediaRecovery(vid, seriesId, options, consume) {
     options.cancelToken?.throwIfRequested();
     if (options.signal?.aborted || controller.signal.aborted) throw Object.assign(new Error('已取消媒体请求'), { code: 'ERR_CANCELED' });
   };
-  const recoverable = error => error?.code === 'SOURCE_UNAVAILABLE'
+  const recoverable = error => isDownloadSourceRejection(error) ? false : error?.code === 'SOURCE_UNAVAILABLE'
     ? sourceFailureIsTransient(error)
     : error?.mediaRetryable || error?.code === 'MEDIA_DECODE_ERROR'
       || ['ECONNRESET', 'ECONNABORTED', 'ETIMEDOUT', 'EPIPE', 'ERR_BAD_RESPONSE', 'ERR_STREAM_PREMATURE_CLOSE', 'EAI_AGAIN'].includes(error?.code);
@@ -2748,6 +2816,7 @@ async function withMediaRecovery(vid, seriesId, options, consume) {
           return value;
         } catch (error) {
           cancelled();
+          if (isDownloadSourceRejection(error)) throw error;
           // Local storage/security failures cannot be repaired by trying a lower-quality video.
           const terminal = error?.path || error?.dest
             || /^(?:EACCES|EPERM|ENOSPC|EDQUOT|EROFS|EIO|ENOENT|EEXIST|ENOTDIR|EISDIR|EMFILE|ENFILE|EBUSY|ENAMETOOLONG|EMLINK|EFBIG|LOCAL_MEDIA_TOOL_ERROR|SECURITY_BLOCKED|ERR_WEB_MEDIA_ADDRESS)$/.test(error?.code);
@@ -3027,7 +3096,7 @@ async function fetchDecryptedEpisodeOnce(vid, onProgress, seriesId, playInfo, si
   if (total > maxBytes) { response.data.destroy(); throw tooLarge(); }
   const chunks = [];
   let received = 0, lastProgress = 0;
-  if (playInfo.contentKey) {
+  if (playInfo.contentKey || playInfo.codec === 'bytevc2') {
     let temporary;
     try {
       temporary = await fsp.mkdtemp(path.join(app.getPath('temp'), 'hongguo-decrypt-'));
@@ -3041,8 +3110,15 @@ async function fetchDecryptedEpisodeOnce(vid, onProgress, seriesId, playInfo, si
       });
       await pipeline(response.data, fs.createWriteStream(input, { mode: 0o600 }), { signal });
       if (!received || (total && received !== total)) throw mediaTransferError('视频下载不完整，请重试');
-      if (onProgress) onProgress(received, received, 'decrypting');
-      await decryptContentKeyFile(input, output, playInfo.contentKey, { signal });
+      if (playInfo.codec === 'bytevc2') {
+        onProgress?.(0, received, 'transcoding');
+        await convertBytevc2({ executable: resolveFfmpeg('librempeg'), input, output,
+          contentKey: playInfo.contentKey, duration: playInfo.duration, signal, maxBytes,
+          onProgress: seconds => onProgress?.(Math.floor(received * Math.min(1, seconds / playInfo.duration)), received, 'transcoding') });
+      } else {
+        if (onProgress) onProgress(received, received, 'decrypting');
+        await decryptContentKeyFile(input, output, playInfo.contentKey, { signal });
+      }
       if ((await fsp.stat(output)).size > maxBytes) throw tooLarge();
       return await fsp.readFile(output);
     } finally {
@@ -3109,9 +3185,9 @@ ipcMain.handle('prepare-online-play', async (event, payload) => {
             }
           };
           const prepared = await withMediaRecovery(sourceVid,seriesId,{playInfo:checkedPlayInfo,quality,force,signal:controller.signal},async playInfo => {
-            const entry = {quality,codec:playInfo.codec || '',size:0,lastUsed:Date.now(),seriesId:String(seriesId||''),vidIndex:Number(vidIndex)||0};
+            const entry = {quality,codec:playInfo.codec === 'bytevc2' ? 'h264' : playInfo.codec || '',size:0,lastUsed:Date.now(),seriesId:String(seriesId||''),vidIndex:Number(vidIndex)||0};
             if (playInfo.format === 'hls') await prepareHlsEntry(playInfo,entry,controller.signal,received => progress(received,0));
-            else if (!prefetch && !playInfo.spadeA && !playInfo.contentKey) return {...entry,playInfo};
+            else if (!prefetch && !playInfo.spadeA && !playInfo.contentKey && playInfo.codec !== 'bytevc2') return {...entry,playInfo};
             else {
               entry.buffer = await fetchDecryptedEpisodeOnce(sourceVid,progress,seriesId,playInfo,controller.signal);
               entry.size = entry.buffer.length;
@@ -3137,7 +3213,8 @@ ipcMain.handle('prepare-online-play', async (event, payload) => {
       cached, streaming: !!entry.playInfo, codec: entry.codec || '' };
   } catch (error) {
     releaseOnlineSession(streamId);
-    return { success: false, error: error.message, code: error.code };
+    return { success: false, error: error.message, code: error.code,
+      ...(Array.isArray(error.sources) ? { sources: error.sources.map(({ source, code }) => ({ source, code })) } : {}) };
   }
 });
 
@@ -3702,8 +3779,19 @@ async function enqueueEpisodes({ seriesId, seriesTitle, episodes, cover, quality
   const root = (settings.root && String(settings.root).trim()) ? String(settings.root).trim() : app.getPath('downloads');
   const cleanSeriesTitle = sanitizeFolderName(seriesTitle) || '红果短剧';
   const downloadDir = nasDestination ? nasDestination.directory : seriesDownloadDir(root, seriesId, cleanSeriesTitle);
-  if (!nasDestination) { try { fs.mkdirSync(downloadDir, { recursive: true }); } catch (_) {} }
+  if (!nasDestination) fs.mkdirSync(downloadDir, { recursive: true });
+  const directoryIdentity = nasDestination ? null : readDirectoryIdentity(downloadDir);
+  let metadataWarning = '';
+  if (!nasDestination && settings.download_metadata === true) {
+    try {
+      const entry = seriesRegistry.find(item => String(item.series_id) === String(seriesId));
+      const result = await prepareNasExport({ root: downloadDir, folderName: cleanSeriesTitle,
+        series: entry || { series_id: seriesId, series_title: seriesTitle, cover: cover || episodes[0]?.cover || '' } });
+      metadataWarning = result.warnings.join('；');
+    } catch (_) { metadataWarning = '整剧封面或简介未能保存，视频下载不受影响；检查目录后可重新提交补齐'; }
+  }
 
+  if (directoryIdentity) validateDirectoryIdentity(directoryIdentity, path.join(downloadDir, 'directory-check'));
   const batchId = 'hongguobatch_' + randomUUID();
   const firstCover = cover || (episodes[0] && episodes[0].cover) || '';
 
@@ -3730,6 +3818,9 @@ async function enqueueEpisodes({ seriesId, seriesTitle, episodes, cover, quality
     );
     if (dup) {
       changedTasks.push({ task: dup, previous: { ...dup } });
+      if (!nasDestination) dup.metadataWarning = metadataWarning;
+      if (!nasDestination && !dup.nasDestination && !dup.directoryIdentity && typeof dup.savePath === 'string' && fs.existsSync(path.dirname(dup.savePath)))
+        dup.directoryIdentity = readDirectoryIdentity(path.dirname(dup.savePath));
       if (nasDestination) {
         Object.assign(dup, { savePath: finalPath, customDir: downloadDir, filename, nasDestination, downloadQuality, nasWarning: '', pathConflict: false });
         delete dup.nasTargets;
@@ -3767,7 +3858,9 @@ async function enqueueEpisodes({ seriesId, seriesTitle, episodes, cover, quality
       platform: 'hongguo',
       type: 'hongguo',
       downloadQuality,
+      ...(metadataWarning ? { metadataWarning } : {}),
       ...(nasDestination ? { nasDestination } : {}),
+      ...(directoryIdentity ? { directoryIdentity } : {}),
       status: nasReady.has(String(ep.vid)) ? 'completed' : 'pending',
       progress: nasReady.has(String(ep.vid)) ? 100 : 0,
       receivedBytes: 0,
@@ -3806,7 +3899,7 @@ async function enqueueEpisodes({ seriesId, seriesTitle, episodes, cover, quality
 }
 
 const nasSubmissions = new Set();
-ipcMain.handle('download-series-to-nas', async (_event, seriesId, quality) => {
+ipcMain.handle('download-series-to-nas', async (_event, seriesId, quality, options = {}) => {
   const sid = String(seriesId || '');
   if (nasSubmissions.has(sid)) return { success: false, error: '本剧正在整理到 NAS，请等待本次提交完成' };
   nasSubmissions.add(sid);
@@ -3814,11 +3907,13 @@ ipcMain.handle('download-series-to-nas', async (_event, seriesId, quality) => {
     const entry = seriesRegistry.find(item => String(item.series_id) === sid);
     if (!entry?.episodes?.length) return { success: false, error: '未找到该剧档案，请先打开剧集' };
     const selection = await dialog.showOpenDialog(mainWindow, {
-      title: '选择已挂载的 NAS 共享文件夹', buttonLabel: '保存到此目录', properties: ['openDirectory'],
+      title: options.createFolder === true ? '选择 NAS 保存位置，将自动创建剧名文件夹' : '选择已挂载的 NAS 共享文件夹',
+      buttonLabel: '保存到此目录', properties: ['openDirectory'],
     });
     if (selection.canceled || !selection.filePaths?.[0]) return { success: false, canceled: true };
     const folderName = `${sanitizeFolderName(entry.series_title) || '未命名短剧'}-${createHash('sha256').update(sid).digest('hex').slice(0, 12)}`;
-    const { destination, warnings } = await prepareNasExport({ root: selection.filePaths[0], folderName, series: entry });
+    const { destination, warnings } = await prepareNasExport({ root: selection.filePaths[0], folderName, series: entry,
+      createFolder: options.createFolder === true });
     const wanted = entry.episodes.filter(episode => !episode.locked);
     const locked = entry.episodes.length - wanted.length;
     if (locked) warnings.push(`${locked} 集已锁定，需在来源平台解锁后再下载`);
@@ -4255,7 +4350,11 @@ ipcMain.handle('open-account-web-login', async () => {
       sendToRenderer('account-updated', { signedIn: true });
       if (!win.isDestroyed()) win.close();
     },
-    onError: error => console.warn('[Account]', accountSafeMessage(error)),
+    onError: error => {
+      const message = accountSafeMessage(error);
+      console.warn('[Account]', message);
+      sendToRenderer('account-updated', { error: message });
+    },
   });
   const changed = () => { void observer.inspect(); };
   getAccountWebSession().cookies.on('changed', changed);
@@ -4343,7 +4442,7 @@ ipcMain.handle('select-folder', async () => {
   return result.filePaths[0];
 });
 
-const SETTINGS_KEYS = ['root', 'name_format', 'max_concurrent', 'download_quality', 'export_text', 'auto_delete_watched', 'compat_mode', 'cache_next_episode', 'picture_in_picture_mode', 'show_danmaku_controls', 'app_updates_enabled', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'fast_cdn_host', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'];
+const SETTINGS_KEYS = ['root', 'name_format', 'max_concurrent', 'download_quality', 'download_metadata', 'export_text', 'auto_delete_watched', 'compat_mode', 'cache_next_episode', 'picture_in_picture_mode', 'show_danmaku_controls', 'app_updates_enabled', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'fast_cdn_host', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'];
 
 function normalizeTextExportKinds(value) {
   return { danmaku: value?.danmaku === true, comments: value?.comments === true, reviews: value?.reviews === true };
@@ -4351,7 +4450,7 @@ function normalizeTextExportKinds(value) {
 
 function settingsForRenderer(settings) {
   const copy = { ...settings };
-  copy.proxy_password_set = !!copy.proxy_password;
+  copy.proxy_password_set = copy.proxy_password_set === true || !!copy.proxy_password;
   delete copy.proxy_password;
   return copy;
 }
@@ -4391,7 +4490,7 @@ async function saveSettings(settings) {
     // Window/source preferences may change while the native proxy operation is pending.
     const latest = applyEditableSettings(getCurrentSettings(), settings);
     latest.download_quality = merged.download_quality;
-    try { store.saveSettings(latest); }
+    try { store.saveSettings(latest, { clearProxyPassword: settings?.clear_proxy_password === true && !String(settings?.proxy_password || '') }); }
     catch (error) {
       try { await applyProxyWithTimeout(current, 5000); } catch (_) { /* 旧配置也可能已不可用 */ }
       throw error;
@@ -4512,8 +4611,28 @@ ipcMain.handle('get-download-tasks', () => {
 // ===== 文件清理（删除已下载的本地文件）=====
 
 /** 单任务与单集共用：文件及其临时产物必须归目标记录独占。 */
-function removeEpisodeFiles(paths, owners) {
+async function validateNasDeletion(tasks) {
+  const expected = tasks.map(task => ({ task, savePath: task.savePath, destination: task.nasDestination, directoryIdentity: task.directoryIdentity }));
+  for (const { savePath, destination, directoryIdentity } of expected) {
+    if (!destination && directoryIdentity) validateDirectoryIdentity(directoryIdentity, savePath);
+    if (!destination) continue;
+    const stat = await fsp.lstat(destination.directory);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || stat.dev !== destination.device) throw new Error('NAS 目录不可用或挂载已变化，已保留文件和任务记录');
+    const directory = await checkNasDirectory(destination);
+    if (!pathInside(directory, savePath)) throw new Error('NAS 文件已不在登记目录中，已保留文件和任务记录');
+  }
+  return () => {
+    if (expected.some(({ task, savePath, destination, directoryIdentity }) => !downloadTasks.includes(task)
+      || task.savePath !== savePath || task.nasDestination !== destination || task.directoryIdentity !== directoryIdentity)) {
+      throw new Error('任务保存位置已变化，已保留文件和记录，请重试');
+    }
+  };
+}
+
+async function removeEpisodeFiles(paths, owners) {
   let freed = 0, failed = 0, count = 0, warning;
+  try { const checkCurrent = await validateNasDeletion(owners); checkCurrent(); }
+  catch (error) { return { count, freed, failed, warning: error.message }; }
   for (const file of new Set(paths.filter(Boolean))) {
     const family = episodeFilePaths(file);
     if (!ownsEpisodeFiles(file, owners) || family.some(isFileInUse)
@@ -4589,7 +4708,7 @@ async function deleteTaskRecords(taskIds, options) {
         }
       }
       if (deleteFiles) {
-        const result = removeEpisodeFiles([task.savePath], [task]);
+        const result = await removeEpisodeFiles([task.savePath], [task]);
         freed += result.freed; fileCount += result.count; failed += result.failed;
         if (result.warning) { warnings.push(result.warning); errors.push(result.warning); }
         if (result.failed) { errors.push('部分文件删除失败，对应任务记录已保留'); continue; }
@@ -4617,7 +4736,7 @@ ipcMain.handle('delete-tasks', (_event, taskIds, options) => {
  * 删除某一部剧的全部本地文件（含合并产物），并清理对应任务记录。
  * 剧集档案保留（仍能看到分集、可在线播放），只是变成「未下载」。
  */
-function deleteSeriesFiles(seriesId, options) {
+async function deleteSeriesFiles(seriesId, options) {
   try {
     const sid = String(seriesId);
     const includeMerged = !(options && options.includeMerged === false);
@@ -4628,6 +4747,8 @@ function deleteSeriesFiles(seriesId, options) {
     const { dir } = files;
     const paths = new Set([...files.episodePaths, ...files.temporaryPaths,
       ...(includeMerged ? [...files.mergedPaths, ...files.concatPaths] : [])]);
+    const checkCurrent = await validateNasDeletion(downloadTasks.filter(task => String(task.hongguoInfo?.series_id) === sid));
+    checkCurrent();
     const cancelledRetries = cancelScheduledRetries(downloadTasks.filter(task => String(task.hongguoInfo?.series_id) === sid));
     let count = 0, freed = 0, failed = files.scanFailed;
     for (const file of paths) {
@@ -4665,7 +4786,7 @@ async function deleteEpisodeFile(seriesId, vidIndex) {
     const paths = [...tasks.map(task => task.savePath), ...scanned.ordered.filter(episode => episode.vid_index === idx).map(episode => episode.path),
       ...(scanned.dir ? [...scanned.episodeNames].filter(([, index]) => index === idx).map(([name]) => path.join(scanned.dir, name)) : [])];
     const cancelledRetries = cancelScheduledRetries(tasks);
-    const result = removeEpisodeFiles(paths, tasks);
+    const result = await removeEpisodeFiles(paths, tasks);
     const ids = tasks.filter(task => task.savePath && ownsEpisodeFiles(task.savePath, tasks)
       && episodeFilePaths(task.savePath).every(file => !fs.existsSync(file))).map(task => task.id);
     try { if (ids.length || cancelledRetries) dropTaskRecords(ids); }
@@ -4778,7 +4899,7 @@ ipcMain.handle('delete-all-downloaded', async () => {
     const targets = deletionTargets();
     for (const { series_id: sid } of targets) {
       if (mergeTasks.some(task => String(task.seriesId) === String(sid) && task.status === 'running')) { skipped++; continue; }
-      const result = deleteSeriesFiles(sid);
+      const result = await deleteSeriesFiles(sid);
       if (result.error) errors.push(result.error);
       count += result.count || 0;
       freed += result.freed || 0;
@@ -4795,18 +4916,20 @@ ipcMain.handle('stop-download', async (event, taskId) => {
   const task = downloadTasks.find((t) => t.id === taskId);
   if (!task) return { success: false, error: '任务不存在' };
 
-  clearSourceRetry(task);
+  const snapshot = snapshotQueueTasks([task]);
   task.cancelled = true;
-  if (task.cancelSource) { try { task.cancelSource.cancel('用户停止下载'); } catch (_) {} }
-  if (task.writer) { try { task.writer.destroy(); } catch (_) {} }
-
+  delete task.retryAt; delete task.sourceRetries;
   task.status = 'stopped';
   task.error = '';
   task.endTime = Date.now();
+  downloadQueue = downloadQueue.filter(item => item.id !== task.id);
+  try { saveDownloadTasks(); }
+  catch (error) { restoreQueueTasks(snapshot); throw error; }
+  clearSourceRetry(task);
+  if (task.cancelSource) { try { task.cancelSource.cancel('用户停止下载'); } catch (_) {} }
+  if (task.writer) { try { task.writer.destroy(); } catch (_) {} }
   delete task.cancelSource;
   delete task.writer;
-
-  saveDownloadTasks();
   sendToRenderer('download-stopped', { id: taskId, path: task.savePath });
   return { success: true };
 });
@@ -5355,7 +5478,7 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
   let startupStage = '读取本地数据';
   try {
     const dataFile = path.join(app.getPath('userData'), 'data.json');
-    store.init(dataFile);
+    store.init(dataFile, { safeStorage });
     setDeviceIdentityFile(path.join(app.getPath('userData'), 'danmaku-client.json'));
     loadDownloadTasks();
     loadSeriesRegistry();

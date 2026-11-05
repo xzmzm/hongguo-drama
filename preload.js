@@ -1,4 +1,4 @@
-// 红果短剧 5.4：桌面桥接入口，发行说明见 docs/release-5.4.md。
+// 红果短剧 5.9：桌面桥接入口，发行说明见 docs/release-5.9.md。
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -58,7 +58,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 红果解析与下载
   hongguoResolve: (input) => ipcRenderer.invoke('hongguo-resolve', input),
   hongguoDownloadBatch: (payload) => ipcRenderer.invoke('hongguo-download-batch', payload),
-  downloadSeriesToNas: (seriesId, quality) => ipcRenderer.invoke('download-series-to-nas', seriesId, quality),
+  downloadSeriesToNas: (seriesId, quality, options) => ipcRenderer.invoke('download-series-to-nas', seriesId, quality, options),
   onNasExportDone: cb => {
     const listener = (_event, data) => cb(data);
     ipcRenderer.on('nas-export-done', listener);
@@ -240,6 +240,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   retryTasks: (taskIds) => ipcRenderer.invoke('retry-tasks', taskIds),
   openFolder: (taskId) => ipcRenderer.invoke('open-folder', taskId),
   showInFolder: (filePath) => ipcRenderer.invoke('show-in-folder', filePath),
+  openEpisodeExternal: (seriesId, vidIndex) => ipcRenderer.invoke('open-episode-external', seriesId, vidIndex),
 
   // 一键启动 / 一键暂停 / 队列状态
   pauseAll: () => ipcRenderer.invoke('pause-all'),

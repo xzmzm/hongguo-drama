@@ -25,21 +25,23 @@
 
 
 
-**当前正式版：5.4**（内部 `5.4.0`）。恢复播放取源签名，新增官网登录备用入口、按剧清缓存、观看记录分组与 DLNA 单集投屏。双Mac已签名、公证和装订；Windows EXE未签名。详见 [5.4说明](docs/release-5.4.md)。
+**源码／发行目标：5.9**（内部 `5.9.0`），当前为发行候选。修复切集保帧回调丢失、观看记录分组提示与未读提醒，补齐自动画质预缓存降档；三端验证进行中，详见 [5.9候选说明](docs/release-5.9.md)。上一正式版为5.8，其历史验收保留在 [5.8说明](docs/release-5.8.md)。
 
-| 设备 | 下载 5.4 | 安装方式 |
+以下为5.9正式发行后使用的预定下载链接，目前不代表已有可下载成品；已发布版本请查看下方正式发行入口。
+
+| 设备 | 5.9 预定下载（待发布） | 安装方式 |
 |---|---|---|
-| Apple 芯片 Mac（M 系列），macOS 13+ | [下载 DMG](https://github.com/jackotom/hongguo-drama/releases/download/v5.4/Hongguo-5.4-mac-arm64.dmg) | 打开 DMG，拖入「应用程序」后启动；后续支持应用内更新 |
-| Intel Mac，macOS 13+ | [下载 DMG](https://github.com/jackotom/hongguo-drama/releases/download/v5.4/Hongguo-5.4-mac-x64.dmg) | 打开 DMG，拖入「应用程序」后启动；后续支持应用内更新 |
-| Windows x64（推荐安装版） | [下载安装版 EXE](https://github.com/jackotom/hongguo-drama/releases/download/v5.4/hongguo-downloader-5.4-win-x64-setup.exe) | 按向导安装，后续支持应用内更新 |
-| Windows x64（便携版） | [下载便携 EXE](https://github.com/jackotom/hongguo-drama/releases/download/v5.4/hongguo-downloader-5.4-win-x64.exe) · [下载便携 ZIP](https://github.com/jackotom/hongguo-drama/releases/download/v5.4/hongguo-downloader-5.4-win-x64.zip) | 直接运行 EXE；ZIP 解压后运行同一程序，后续仍需手动替换 |
+| Apple 芯片 Mac（M 系列），macOS 13+ | [待发布 DMG](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/Hongguo-5.9-mac-arm64.dmg) | 打开 DMG，拖入「应用程序」后启动；后续支持应用内更新 |
+| Intel Mac，macOS 13+ | [待发布 DMG](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/Hongguo-5.9-mac-x64.dmg) | 打开 DMG，拖入「应用程序」后启动；后续支持应用内更新 |
+| Windows x64（推荐安装版） | [待发布安装版 EXE](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/hongguo-downloader-5.9-win-x64-setup.exe) | 按向导安装，后续支持应用内更新 |
+| Windows x64（便携版） | [待发布便携 EXE](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/hongguo-downloader-5.9-win-x64.exe) · [待发布便携 ZIP](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/hongguo-downloader-5.9-win-x64.zip) | 直接运行 EXE；ZIP 解压后运行同一程序，后续仍需手动替换 |
 
-[查看最新正式版](https://github.com/jackotom/hongguo-drama/releases/latest) · [5.4 更新说明与源码](https://github.com/jackotom/hongguo-drama/releases/tag/v5.4) · [SHA256 校验文件](https://github.com/jackotom/hongguo-drama/releases/download/v5.4/SHA256SUMS.txt)
+[查看已发布正式版](https://github.com/jackotom/hongguo-drama/releases/latest) · [5.9 候选说明](docs/release-5.9.md) · [预定5.9发行页（待发布）](https://github.com/jackotom/hongguo-drama/releases/tag/v5.9) · [SHA256 校验文件（待发布）](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/SHA256SUMS.txt)
 
 
-- **升级到 5.4**：5.3 安装版可使用应用内更新；也可退出旧程序后替换 Mac 应用或运行 Windows 安装包。便携版保留同目录的 `data` 后手动替换；1.75 及更早版本需要手动安装。
+- **升级到 5.9（发布后）**：5.8 安装版保留应用内更新入口，实际跨版本升级验证待本轮验收；也可退出旧程序后替换 Mac 应用或运行 Windows 安装包。便携版保留同目录的 `data` 后手动替换；1.75 及更早版本需要手动安装。
 - **后续更新**：Mac 与 Windows 安装版可在应用内下载新版，下载完成后由你点击重启安装，不强制升级。Windows 便携版继续通过发行页下载并手动替换。
-- **Mac**：正式包完成 Developer ID 签名、Apple 公证 Accepted 和票据装订。无需全局关闭 Gatekeeper；公证不等于 App Store 审核或内容授权。
+- **Mac**：5.9正式包须完成 Developer ID 签名、Apple 公证 Accepted 和票据装订，本轮结果待主控补齐。无需全局关闭 Gatekeeper；公证不等于 App Store 审核或内容授权。
 - **Windows**：安装版和便携版 EXE 尚未签名，可能出现系统安全提示。请核对官方下载来源；便携版首次启动会展开临时运行文件。安装版沿用原用户资料目录；3.4 起便携版把设置和下载记录放在程序目录的 `data` 文件夹，移动程序时请连同该文件夹一起保留。安装版与便携版不能同时运行（同一应用只允许一个实例）；更换版本前请先退出正在运行的窗口。
 - **普通使用只需上表安装文件**：发行页中的 Mac 更新 ZIP、`latest*.yml` 和 `.blockmap` 供更新程序使用；`source` 文件和 GitHub 自动生成的 Source code 是源码，不能直接运行。
 
@@ -69,6 +71,47 @@
 2. 在「发现短剧」浏览，或在「搜索与下载」输入剧名、红果分享链接或剧集 ID。
 3. 打开详情点「立即播放」，也可选择集数与清晰度加入下载队列。
 4. 下次从「我的剧库」或「观看记录」接着看；下载进度、失败重试和整剧合并在「下载管理」。
+
+## 5.9 发行候选
+
+- 统一公开版本5.9、内部版本5.9.0、三端产物命名与当前发行资料，保留历史版本记录。
+- 修复自动切集时旧画面持续遮挡；首帧回调过早到达后继续等待有效新帧。
+- 同组续作提示汇总去重，保留真实新集红点；点击续作不误清原剧的新集提醒。
+- 自动预缓存有界尝试1080P、720P及兼容片源，固定画质不自动降档，明确拒绝后停止重试。
+- 构建、签名、公证及三端验收状态见 [5.9候选说明](docs/release-5.9.md)。
+
+## 5.8 下载、切集与详情改进
+
+- 修复部分剧集明确未加密的片源被误判为缺少密钥；保留身份、时长、尺寸与地址校验。
+- 匿名注册失败或 App 明确拒绝时，暂停尚未开始的红果队列，保留任务供手动重试；不承诺解除百集上游限制。
+- 同剧切集保留旧画面至新视频首帧；网络准备仍可能等待。
+- 播放区域双击进入／退出全屏；空格短按播放暂停、长按临时2倍速，可在设置中分别改键。
+- 详情海报放大，补真实剧情简介，长简介可展开收起；已下载本集可用系统默认视频播放器打开。
+- 三端已正式发布，完成签名、公证和必要验收。状态与边界见 [5.8说明](docs/release-5.8.md)。
+
+## 5.7 播放兼容与观看体验
+
+- ByteVC2片源先转换为兼容视频，保留原H.264／HEVC优先级；准备期间显示进度并支持取消。
+- 确认同剧后去掉重复提示，独立显示不拆散余组；观看记录操作分两行，完成标记移到时间行。
+- 音量、静音与常用倍速跨视频／重启保存，默认音量50%；长按临时2倍不覆盖偏好。
+- App明确拒绝取源时停止无效自动重试；百集后失效及上游恢复时间仍未证实。
+- 三端已正式发布；本轮构建、签名、公证及验收见 [5.7说明](docs/release-5.7.md)。
+
+## 5.6 播放交互与登录恢复
+
+- 双击画面切换全屏，控制条一键下一集。
+- 长按快进键临时2倍速，松开恢复；短按仍前进5秒。
+- 登录确认不再被匿名设备注册失败阻断，注册失败遵守冷却并回显错误。
+- ByteVC2独占片源明确提示不兼容；#95所报剧集当前仍无法播放。
+- 三端发行与验证边界见 [5.6说明](docs/release-5.6.md)。三端已正式发布，Mac已签名、公证与装订；Windows EXE未签名。
+
+## 5.5 播放恢复与下载整理
+
+- 播放取源独立注册匿名身份，修复连续切集和批量下载复用失效身份的问题。内联片源缺少解密信息时，仅有界尝试经身份、完整时长、实际画质、加密和地址校验的备用接口。
+- 修复 NAS 挂载变化下的删除安全、分集资料冲突、暂停保存失败与合并磁盘空间预检。代理密码改用本机系统安全存储。
+- 不再新建分集 NFO，保留整剧封面、简介和 tvshow.nfo；NAS 可自动创建剧名文件夹，普通下载可在设置中开启整剧资料。
+- 新增直接查看当前集公开评论和本机分集小红心，收藏与小红心明确只保存在本机。来源未提供的评论不补造，平台公开点赞数保持来源原值。
+- 5.5 已正式发布。完成三端构建与文件完整性核对、双 Mac 签名/公证/装订；按用户要求未重跑功能、单元、集成、桌面及硬件测试。详见 [5.5说明](docs/release-5.5.md)。
 
 ## 5.4 恢复播放与下载
 

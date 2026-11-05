@@ -11,8 +11,8 @@ const source = path.resolve(__dirname, '../main.js');
 const req = createRequire(source);
 const dirs = [];
 const unavailable = (sources) => ({ url: null, code: 'SOURCE_UNAVAILABLE', sources,
-  error: '本集取源失败：网页：请求失败（HTTP 404）；App：接口暂时拒绝本次请求；旧接口：片源数据无法解析。请重试或在官方 App 确认可播情况。' });
-const webGone = [{ source: 'web', code: 'HTTP_404' }, { source: 'app', code: 'BUSINESS_REJECTED' }, { source: 'api', code: 'INVALID_RESPONSE' }];
+  error: '本集取源失败：网页：请求失败（HTTP 404）；App：暂未提供本集片源模型；旧接口：片源数据无法解析。请重试或在官方 App 确认可播情况。' });
+const webGone = [{ source: 'web', code: 'HTTP_404' }, { source: 'app', code: 'MISSING_MODEL' }, { source: 'api', code: 'INVALID_RESPONSE' }];
 function fixture(initialTasks) {
   const now = Date.now();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hongguo-source-retry-'));
@@ -135,7 +135,7 @@ const checks = [
       assert.equal(h.live().length, 0, JSON.stringify(failure));
     }
   }],
-  ['web 404 plus App rejection schedules bounded delayed retries', async () => {
+  ['web 404 plus missing App model schedules bounded delayed retries', async () => {
     const h = fixture();
     for (const [index, minutes] of [3, 8, 15].entries()) {
       await h.download();
@@ -156,7 +156,7 @@ const checks = [
     assert.equal(h.live().length, 0);
   }],
   ['App refusal, security and third-party failures are not deferred', async () => {
-    for (const [sources, vid] of [[[{ source: 'app', code: 'BUSINESS_REJECTED' }]], [[{ source: 'app', code: 'HTTP_403' }]], [[{ source: 'web', code: 'SECURITY_BLOCKED' }]], [[{ source: 'app', code: 'TIMEOUT' }, { source: 'web', code: 'SECURITY_BLOCKED' }]], [webGone, 'custom:a:1']]) {
+    for (const [sources, vid] of [[[{ source: 'app', code: 'BUSINESS_REJECTED' }]], [[{ source: 'app', code: 'HTTP_403' }]], [[{ source: 'web', code: 'HTTP_404' }, { source: 'app', code: 'BUSINESS_REJECTED' }]], [[{ source: 'web', code: 'TIMEOUT' }, { source: 'app', code: 'DEVICE_REGISTRATION_FAILED' }]], [[{ source: 'web', code: 'SECURITY_BLOCKED' }]], [[{ source: 'app', code: 'TIMEOUT' }, { source: 'web', code: 'SECURITY_BLOCKED' }]], [webGone, 'custom:a:1']]) {
       const h = fixture();
       h.state.result = unavailable(sources);
       if (vid) h.run(`downloadTasks[0].hongguoInfo.vid = ${JSON.stringify(vid)}`);
@@ -242,6 +242,19 @@ const checks = [
       const restarted = fixture(h.saved());
       await restarted.start();
       assert.equal(restarted.live().length, 0, 'paused tasks stay paused on restart');
+    }
+  }],
+  ['pause and stop preserve a durable retry plan when saving fails', async () => {
+    for (const action of ['pause-all', 'stop-download']) {
+      const h = fixture();
+      await h.download();
+      const retryAt = h.task().retryAt;
+      h.state.saveError = Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' });
+      await assert.rejects(h.handlers[action]({}, 't1'));
+      assert.equal(h.task().status, 'failed', action);
+      assert.equal(h.task().retryAt, retryAt, action);
+      assert.equal(h.saved()[0].retryAt, retryAt, action);
+      assert.equal(h.live().length, 1, action + ' must retain its original timer');
     }
   }],
   ['timer persistence failure is contained and leaves manual retry available', async () => {

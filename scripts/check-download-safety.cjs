@@ -35,6 +35,51 @@ function series() { return [{ series_id: 'S', series_title: 'Short', episodes: [
 function file(p) { fs.writeFileSync(p, Buffer.alloc(120000)); }
 async function check(name, run) { try { await run(); console.log('PASS ' + name); } catch (error) { failures++; console.error('FAIL ' + name + ': ' + error.message); } }
 (async () => {
+  await check('NAS deletion rejects a changed mount and retains the task and foreign file', async () => {
+    for (const channel of ['delete-task', 'delete-tasks', 'delete-series-files', 'delete-all-downloaded', 'delete-episode-file']) {
+      const h = load(); h.set('seriesRegistry', series());
+      const one = task('one', h.dir); file(one.savePath);
+      one.nasDestination = { root: fs.realpathSync(h.dir), directory: fs.realpathSync(h.dir), flat: true,
+        device: fs.statSync(h.dir).dev + 1, seriesId: 'S', title: 'Short', season: 1 };
+      h.set('downloadTasks', [one]);
+      const args = channel === 'delete-task' ? ['one', { deleteFiles: true }]
+        : channel === 'delete-tasks' ? [['one'], { deleteFiles: true }]
+        : channel === 'delete-episode-file' ? ['S', 1] : ['S'];
+      const result = await h.handlers[channel]({}, ...args);
+      assert.equal(result.success, false, channel);
+      assert.equal(fs.existsSync(one.savePath), true, channel + ' must preserve a foreign mount file');
+      assert.equal(h.run('downloadTasks.length'), 1, channel + ' must retain its task');
+    }
+  });
+  await check('ordinary download records retain directory identity and reject replacement mounts', async () => {
+    const queued = load(); queued.set('seriesRegistry', series());
+    const submitted = await queued.handlers['hongguo-download-batch']({}, { seriesId:'S', seriesTitle:'Short', episodes:series()[0].episodes, quality:'auto' });
+    assert.equal(submitted.success, true);
+    const recorded = queued.run('downloadTasks[0].directoryIdentity');
+    assert.equal(fs.realpathSync(recorded.directory), recorded.directory);
+    assert.equal(recorded.device, fs.statSync(recorded.directory).dev);
+    for (const channel of ['delete-task', 'delete-tasks', 'delete-series-files', 'delete-all-downloaded', 'delete-episode-file']) {
+      const h = load(); h.set('seriesRegistry', series());
+      const one = task('one', h.dir); file(one.savePath);
+      one.directoryIdentity = { directory:fs.realpathSync(h.dir), device:fs.statSync(h.dir).dev+1 };
+      h.set('downloadTasks',[one]);
+      const args = channel === 'delete-task' ? ['one',{deleteFiles:true}] : channel === 'delete-tasks' ? [['one'],{deleteFiles:true}]
+        : channel === 'delete-episode-file' ? ['S',1] : ['S'];
+      const result = await h.handlers[channel]({},...args);
+      assert.equal(result.success,false,channel);
+      assert.equal(fs.existsSync(one.savePath),true,channel);
+      assert.equal(h.run('downloadTasks.length'),1,channel);
+    }
+  });
+  await check('queued ordinary downloads refuse a changed directory before resolving media', async () => {
+    let lookedUp = 0;
+    const h = load({}, {'./src/native/hongguo':{fetchPlayUrlSingle:async()=>{lookedUp++;throw Error('unexpected source lookup');}}});
+    const one = task('one',h.dir,'pending');
+    one.directoryIdentity={directory:fs.realpathSync(h.dir),device:fs.statSync(h.dir).dev+1};
+    h.set('downloadTasks',[one]);
+    await h.context.executeHongguoDownload(one);
+    assert.equal(one.status,'failed');assert.equal(lookedUp,0);assert.equal(fs.existsSync(one.savePath),false);
+  });
   await check('deleting downloads preserves active online sessions and cached episodes', async () => {
     for (const channel of ['delete-series-files', 'delete-all-downloaded']) {
       const h = load(); h.set('seriesRegistry', series());
@@ -519,7 +564,7 @@ async function check(name, run) { try { await run(); console.log('PASS ' + name)
   await check('store save failure is reported and retains the durable snapshot', () => {
     const dir = path.join(root, 'store'); fs.mkdirSync(dir); const target = path.join(dir, 'data.json');
     let fail = false; const fakeFs = Object.create(fs); fakeFs.writeFileSync = (...args) => { if (fail) throw new Error('simulated disk full'); return fs.writeFileSync(...args); };
-    const context = vm.createContext({ require: name => name === 'fs' ? fakeFs : req(name), module: { exports: {} }, console: { error() {} } });
+    const context = vm.createContext({ require: name => name === 'fs' ? fakeFs : req(name), module: { exports: {} }, Buffer, URL, structuredClone, console: { error() {} } });
     vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../src/store.js'), 'utf8'), context);
     const store = context.module.exports; store.init(target); store.saveTasks([{ id: 'saved' }]); const before = fs.readFileSync(target, 'utf8'); fail = true;
     assert.throws(() => store.saveTasks([{ id: 'unsaved' }]), /simulated disk full/);
