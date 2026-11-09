@@ -1,6 +1,24 @@
-# 三端同步发布规则
+# 五平台同步发布规则
 
-源码／发行目标为 **5.9**（内部 `5.9.0`），当前仍为发行候选。三端构建、签名、公证、安装与真实素材验收结果待主控补齐；版本统一检查不代替这些门槛。见 [5.9候选说明](release-5.9.md)。
+6.5已于2026-11-09 18:50:43（Asia/Shanghai）正式公开并设Latest，内部6.5.0、桌面构建6.5.1，冻结源码`b99555519d97065b16753cd66326eb62894ec34a`。双Mac、Windows、Linux AppImage、Docker五类产物统一发行，25附件远端大小与SHA256、更新清单和精确源码已核对。双Mac签名、公证、装订；Windows播放/安装/升级与Linux真实静音播放、Docker真实下载合并及重启持久化通过；#124实际鼠标唤醒、真实续播、手动暂停和重启记忆通过。Windows EXE未签名，x64 Mac仅Rosetta，未验飞牛硬件；未替换本机正式安装。 见[6.5说明](release-6.5.md)。
+
+2026-11-09起（6.5及后续）：Docker服务端替换Android TV，五合一为macOS arm64、macOS x64、Windows x64、Linux x64 AppImage、Docker。全部产物及必要验收齐备后同一Release公开；TV不再列为发行阻碍或公开资产。历史回执范围保留。
+
+6.4已于2026-11-09 00:00:50（Asia/Shanghai）正式公开并设Latest，内部6.4.0、桌面构建6.4.1，冻结源码`12fa10087059be49d8f7d9895bae260130fe0e1f`。本次按明确授权发布双Mac、Windows、Linux四平台，TV继续开发、候选APK不公开；后续默认五平台规则保留。23附件远端大小/SHA256及两份更新清单已核对；双Mac签名、公证、装订与最终DMG/更新ZIP验收通过；Windows真实素材便携播放及安装升级验收通过但EXE未签名；Linux原生Ubuntu CI以CPU软件解码完成两集真实下载与静音播放。Mac两集静音播放及中英文切换、播放器保留、重载记忆通过；x64经Rosetta启动，不等于实体Intel验收。未替换本机正式安装。 见[6.4说明](release-6.4.md)。
+
+6.3已于2026-11-08 19:46:30（Asia/Shanghai）正式公开并设Latest，内部6.3.0、桌面构建6.3.1，冻结源码`13a07e30f1e4ec5b4dd4fcc73871bc097d09d816`。用户明确授权本次先双Mac、Windows、Linux四平台，TV未实机验收、候选APK不公开。23附件远端大小/SHA256及两份更新清单已核对；双Mac签名/公证/装订，Windows便携11项和安装升级9项通过但EXE未签名；Linux原生Ubuntu CI提取AppImage后，以CPU软件解码播放两集新下载1080p红果素材各10秒。Mac真实两集静音播放及x64 Rosetta启动通过；未替换正式安装。 这是本轮明确例外；后续默认五平台规则保留。详见 [6.3说明](release-6.3.md)。
+
+2026-11-06起，后续正式版本统一发布五类平台包：Mac Apple Silicon arm64、Mac Intel x64、Windows x64、Linux x64 AppImage、Android TV APK。同一公开版本、标签和Release，全部包在Draft齐备后一次公开并更新Latest；缺平台保留草稿，不先发部分平台。完整门槛见 [RELEASING.md](RELEASING.md)。以下旧版回执保留历史范围，不代表五平台已完成。
+
+2026-11-06历史核对：当时GitHub最新正式标签为 `v6.1`，2026-11-06 13:26:14（Asia/Shanghai）公开，附件已有双Mac、Windows及Linux x64 AppImage，没有Android TV APK。当时工作区仍为6.0；当时后续开发须先对齐最新冻结源码，不覆盖已发布包。问题整理见 [最新反馈](issues-2026-11-06.md)，TV移植进度见 [Android TV](android-tv.md)。
+
+6.2优化版已于2026-11-07 19:17:14（Asia/Shanghai）正式发布，四平台23附件已核对；冻结`affc81c7f885bcdbcbc06e4c205b820c61f9c0c4`。双Mac签名、公证、装订，Windows安装升级通过但EXE未签名，Linux启动通过、实际播放未验。未替换正式安装。详见[6.2说明](release-6.2.md)。
+
+6.1 已于 2026-11-06 13:26（Asia/Shanghai）正式发布，内部 `6.1.0`，标签 `v6.1` 并设为 Latest。冻结源码 `a93793dea2f13864e8a56771bb6bea05ea6ddbb6`；后续文档提交不改变冻结标签和安装包。23份附件远端大小与SHA256逐项一致。 Mac签名/公证/装订，Windows安装升级通过；Linux启动通过、实际播放未验。详见 [6.1说明](release-6.1.md)。
+
+6.0 已于 2026-11-05 21:59（Asia/Shanghai）正式发布，内部 `6.0.0`，标签 `v6.0` 并设为Latest；冻结源码 `c51b9e9378c27b5e84cd201a84b2df2a7a99579f`。降低ByteVC2兼容转换并发与线程占用，当前播放优先，保留后两集预缓存、切集复用和自动连播。三端19附件远端大小/SHA256与10个匿名下载入口通过；双Mac App/DMG四份Apple Accepted、Developer ID签名与装订通过；Windows便携11项、安装/重装及真实1.80升级资料保留9项通过，EXE未签名。323单元/108平台、源码CI42030393234及Windows CI42030558184通过。本机同一真实ByteVC2片段平均核心占用降低约56%，不代表Windows整机表现；最终arm64包真实两集静音自动交接和x64 Rosetta启动退出通过。未替换本机正式安装。 详见 [6.0说明](release-6.0.md)。
+
+5.9 已于 2026-11-05 18:24（Asia/Shanghai）正式发布，标签 `v5.9` 并设为Latest；冻结源码 `6f7dc3be99bba5ad1975cd28317658a06083a696`。三端19附件远端大小/SHA256一致；双Mac App与DMG四份新Apple Accepted、Developer ID签名、装订、只读挂载和最终更新ZIP恢复通过。源码CI42006135704通过319单元/108平台；Windows CI42006238343便携11项、安装/重装及真实1.80升级资料保留9项通过，EXE未签名。最终arm64包随机真实下载两集1080P HEVC/AAC并全程静音播放，两倍速自动交接后覆盖层hidden、视频帧已提交；x64经Rosetta启动退出通过，原生截图工具超时，不是实体Intel验收。未替换本机正式安装。 详见 [5.9说明](release-5.9.md)。
 
 5.8 已于 2026-11-05 12:29（Asia/Shanghai）正式发布，标签 `v5.8` 并设为Latest；冻结源码 `9b0e2db7c48e6df985e285e951e2bc6ee037d737`。三端19附件远端大小／SHA256与10匿名下载入口通过。双Mac App／DMG四份新Apple Accepted、Developer ID签名、装订、只读挂载及最终更新ZIP恢复通过。源码CI41964533949与WindowsCI41964672253成功，Windows便携11项及安装／重装／真实1.80升级资料保留9项通过，EXE未签名。最终arm64包随机真实下载两集1080P HEVC／AAC，均静音播放9.3秒暂停；详情展开收起、窄窗口、双击全屏保暂停、空格短按／长按和设置改键已验。x64经Rosetta启动退出通过，不是实体Intel验收。未替换本机正式安装。 变化与边界见 [5.8说明](release-5.8.md)。
 
@@ -48,7 +66,7 @@
 
 上一正式版为 **3.9**（内部 `3.9.0`，标签 `v3.9`）。三端 16 项附件已发布；Mac 已签名、公证和装订，Windows CI 已通过。详细变化、回执及验证边界见 [3.9 说明](release-3.9.md)。
 
-从1.1.9开始，每次项目更新统一评估并构建三端：macOS Apple Silicon arm64、macOS Intel x64、Windows x64。使用同一发行版本，分别记录构建、签名、公证、安装和运行验收。
+历史上从1.1.9开始统一三端；2026-11-06起按本文顶部五平台规则执行，分别记录构建、签名、公证、安装和运行验收。
 
 3.9（内部 `3.9.0`）已于 2026-10-27 14:15（Asia/Shanghai）正式发布，标签 `v3.9`。冻结源码 `4a88f2ea597101a5c2e92f2ab564afee9c5167e0`；三端 16 项附件的远端 SHA256 与大小逐项匹配。双 Mac App 与 DMG 已完成 Developer ID 签名、Apple 公证 Accepted 和装订。Windows CI 40458538824 的便携播放、安装、重装与真实 1.80 升级资料保留通过；EXE 未签名。 本版包含 App 取流恢复、搜索补搜、双集预取与窗口模式改进；见 [3.9 说明](release-3.9.md)。
 

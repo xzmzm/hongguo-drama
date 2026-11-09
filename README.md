@@ -2,14 +2,14 @@
   <img src="build/icon.png" alt="红果短剧桌面版图标" width="112" height="112">
 </p>
 
-<h1 align="center">红果短剧 · 桌面版</h1>
+<h1 align="center">红果短剧 · 桌面与NAS</h1>
 
 <p align="center">发现好剧，接着上次看。搜索、播放、下载、追剧与合并导出，在一个桌面应用里完成。</p>
 
 <p align="center">
   <a href="https://github.com/jackotom/hongguo-drama/releases/latest"><img alt="最新公开版本" src="https://img.shields.io/github/v/release/jackotom/hongguo-drama?style=flat-square"></a>
   <img alt="macOS 13 或更新版本" src="https://img.shields.io/badge/macOS-13%2B-555555?style=flat-square">
-  <img alt="M 系列 Mac、Intel Mac 与 Windows x64" src="https://img.shields.io/badge/platforms-Mac_arm64_%2F_x64_%C2%B7_Windows_x64-55746b?style=flat-square">
+  <img alt="M 系列 Mac、Intel Mac、Windows、Linux x64 与 Docker amd64" src="https://img.shields.io/badge/platforms-Mac_arm64_%2F_x64_%C2%B7_Windows_x64_%C2%B7_Linux_x64_%C2%B7_Docker_amd64-55746b?style=flat-square">
   <a href="LICENSE"><img alt="GPL-3.0 许可证" src="https://img.shields.io/badge/license-GPL--3.0-555555?style=flat-square"></a>
 </p>
 
@@ -23,29 +23,79 @@
 
 ## 下载与安装
 
+**当前正式版：6.5**（内部`6.5.0`）。新增Docker Web/API与NAS批量下载合并，小窗自定义唤醒区域、窗口内全屏和重复弹幕聚合。双Mac、Windows、Linux、Docker同版发布，Docker替代TV。详见[6.5说明](docs/release-6.5.md)。
 
-
-**源码／发行目标：5.9**（内部 `5.9.0`），当前为发行候选。修复切集保帧回调丢失、观看记录分组提示与未读提醒，补齐自动画质预缓存降档；三端验证进行中，详见 [5.9候选说明](docs/release-5.9.md)。上一正式版为5.8，其历史验收保留在 [5.8说明](docs/release-5.8.md)。
-
-以下为5.9正式发行后使用的预定下载链接，目前不代表已有可下载成品；已发布版本请查看下方正式发行入口。
-
-| 设备 | 5.9 预定下载（待发布） | 安装方式 |
+| 平台 | 下载6.5 | 使用方式 |
 |---|---|---|
-| Apple 芯片 Mac（M 系列），macOS 13+ | [待发布 DMG](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/Hongguo-5.9-mac-arm64.dmg) | 打开 DMG，拖入「应用程序」后启动；后续支持应用内更新 |
-| Intel Mac，macOS 13+ | [待发布 DMG](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/Hongguo-5.9-mac-x64.dmg) | 打开 DMG，拖入「应用程序」后启动；后续支持应用内更新 |
-| Windows x64（推荐安装版） | [待发布安装版 EXE](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/hongguo-downloader-5.9-win-x64-setup.exe) | 按向导安装，后续支持应用内更新 |
-| Windows x64（便携版） | [待发布便携 EXE](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/hongguo-downloader-5.9-win-x64.exe) · [待发布便携 ZIP](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/hongguo-downloader-5.9-win-x64.zip) | 直接运行 EXE；ZIP 解压后运行同一程序，后续仍需手动替换 |
+| Apple芯片Mac，macOS 13+ | [DMG](https://github.com/jackotom/hongguo-drama/releases/download/v6.5/Hongguo-6.5-mac-arm64.dmg) | 拖入应用程序；已签名、公证、装订 |
+| Intel Mac，macOS 13+ | [DMG](https://github.com/jackotom/hongguo-drama/releases/download/v6.5/Hongguo-6.5-mac-x64.dmg) | 同上；本轮仅Rosetta启动验收 |
+| Windows x64 | [安装版](https://github.com/jackotom/hongguo-drama/releases/download/v6.5/hongguo-downloader-6.5-win-x64-setup.exe) · [便携EXE](https://github.com/jackotom/hongguo-drama/releases/download/v6.5/hongguo-downloader-6.5-win-x64.exe) · [便携ZIP](https://github.com/jackotom/hongguo-drama/releases/download/v6.5/hongguo-downloader-6.5-win-x64.zip) | 安装版支持应用内更新；EXE未签名 |
+| Linux x64 | [AppImage](https://github.com/jackotom/hongguo-drama/releases/download/v6.5/hongguo-downloader-6.5-linux-x64.AppImage) | 赋予执行权限；手动更新 |
+| Docker Linux amd64 / NAS | [镜像](https://github.com/jackotom/hongguo-drama/releases/download/v6.5/hongguo-drama-6.5-docker-amd64.tar.gz) · [部署包](https://github.com/jackotom/hongguo-drama/releases/download/v6.5/hongguo-drama-6.5-docker-deploy.zip) | docker load后按[部署文档](docs/docker.md)配置令牌和挂载目录 |
 
-[查看已发布正式版](https://github.com/jackotom/hongguo-drama/releases/latest) · [5.9 候选说明](docs/release-5.9.md) · [预定5.9发行页（待发布）](https://github.com/jackotom/hongguo-drama/releases/tag/v5.9) · [SHA256 校验文件（待发布）](https://github.com/jackotom/hongguo-drama/releases/download/v5.9/SHA256SUMS.txt)
+[6.5发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v6.5) · [SHA256](https://github.com/jackotom/hongguo-drama/releases/download/v6.5/SHA256SUMS.txt) · [精确源码](https://github.com/jackotom/hongguo-drama/releases/download/v6.5/hongguo-drama-6.5-source.zip)
+
+小窗唤醒区域入口：**设置 → 小窗模式：隐藏后唤醒区域**；也可在小窗顶部点击“设置唤醒区域”。支持拖动、缩放、百分比及全窗/右侧窄条预设。
+
+Mac和Windows安装版保留应用内更新入口；完整6.4→6.5自动更新尚未实测，也可退出旧程序后手动安装。便携版请保留同目录data资料。Docker需备份任务和视频目录后重新导入/创建容器；不会自动配置公网访问。媒体可用范围和画质仍由来源平台决定。
+
+<details>
+<summary>6.4 历史下载与升级说明</summary>
 
 
-- **升级到 5.9（发布后）**：5.8 安装版保留应用内更新入口，实际跨版本升级验证待本轮验收；也可退出旧程序后替换 Mac 应用或运行 Windows 安装包。便携版保留同目录的 `data` 后手动替换；1.75 及更早版本需要手动安装。
+**历史正式版：6.4**（内部 `6.4.0`）。新增跟随系统／简体中文／English选择与记忆，修复英文文案、Mac菜单和代理连通测试超时。双Mac已签名、公证和装订；Windows EXE未签名，Linux以CPU软件解码完成两集真实下载与静音播放验收。本次发布桌面四平台，TV继续开发、候选不公开。见 [6.4说明](docs/release-6.4.md)。
+
+按设备下载一个安装文件即可；其余源码、更新清单和校验文件供对应用途使用。
+
+| 设备 | 下载 6.4 | 安装方式 |
+|---|---|---|
+| Apple 芯片 Mac（M 系列），macOS 13+ | [下载 DMG](https://github.com/jackotom/hongguo-drama/releases/download/v6.4/Hongguo-6.4-mac-arm64.dmg) | 打开 DMG，拖入「应用程序」后启动；后续支持应用内更新 |
+| Intel Mac，macOS 13+ | [下载 DMG](https://github.com/jackotom/hongguo-drama/releases/download/v6.4/Hongguo-6.4-mac-x64.dmg) | 打开 DMG，拖入「应用程序」后启动；后续支持应用内更新 |
+| Windows x64（推荐安装版） | [下载安装版 EXE](https://github.com/jackotom/hongguo-drama/releases/download/v6.4/hongguo-downloader-6.4-win-x64-setup.exe) | 按向导安装，后续支持应用内更新 |
+| Windows x64（便携版） | [下载便携 EXE](https://github.com/jackotom/hongguo-drama/releases/download/v6.4/hongguo-downloader-6.4-win-x64.exe) · [下载便携 ZIP](https://github.com/jackotom/hongguo-drama/releases/download/v6.4/hongguo-downloader-6.4-win-x64.zip) | 直接运行 EXE；ZIP 解压后运行同一程序，后续仍需手动替换 |
+| Linux x64 | [下载 AppImage](https://github.com/jackotom/hongguo-drama/releases/download/v6.4/hongguo-downloader-6.4-linux-x64.AppImage) | 赋予执行权限后运行；需支持 Chromium 沙箱，解码问题可选择 CPU 软件模式；手动更新 |
+
+[查看已发布正式版](https://github.com/jackotom/hongguo-drama/releases/latest) · [6.4发行说明](docs/release-6.4.md) · [6.4发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v6.4) · [SHA256 校验文件](https://github.com/jackotom/hongguo-drama/releases/download/v6.4/SHA256SUMS.txt)
+
+
+- **升级到 6.4**：安装版保留应用内更新入口；完整6.3到6.4应用内更新尚未实测；也可退出旧程序后替换 Mac 应用或运行 Windows 安装包。便携版保留同目录的 `data` 后手动替换；1.75 及更早版本需要手动安装。
 - **后续更新**：Mac 与 Windows 安装版可在应用内下载新版，下载完成后由你点击重启安装，不强制升级。Windows 便携版继续通过发行页下载并手动替换。
-- **Mac**：5.9正式包须完成 Developer ID 签名、Apple 公证 Accepted 和票据装订，本轮结果待主控补齐。无需全局关闭 Gatekeeper；公证不等于 App Store 审核或内容授权。
+- **Mac**：6.4双架构 App 与 DMG 均已完成 Developer ID 签名、Apple 公证 Accepted 和票据装订。无需全局关闭 Gatekeeper；公证不等于 App Store 审核或内容授权。
 - **Windows**：安装版和便携版 EXE 尚未签名，可能出现系统安全提示。请核对官方下载来源；便携版首次启动会展开临时运行文件。安装版沿用原用户资料目录；3.4 起便携版把设置和下载记录放在程序目录的 `data` 文件夹，移动程序时请连同该文件夹一起保留。安装版与便携版不能同时运行（同一应用只允许一个实例）；更换版本前请先退出正在运行的窗口。
 - **普通使用只需上表安装文件**：发行页中的 Mac 更新 ZIP、`latest*.yml` 和 `.blockmap` 供更新程序使用；`source` 文件和 GitHub 自动生成的 Source code 是源码，不能直接运行。
 
-本项目是社区维护的开源修改版，**不是红果、西饭或河马的官方客户端，也未获平台官方背书**。不提供付费分集解锁；剧集、清晰度和可用范围取决于来源平台。
+</details>
+
+<details>
+<summary>6.3 历史下载与升级说明</summary>
+
+**历史正式版：6.3**（内部 `6.3.0`）。新增可选DramaBox公开来源、减少重复ByteVC2转换，并加速Mac Apple Silicon首次转换。双Mac已签名、公证和装订；Windows EXE未签名，Linux以CPU软件解码完成真实播放验收。本次按明确授权发布桌面四平台，TV候选不公开。见 [6.3说明](docs/release-6.3.md)。
+
+按设备下载一个安装文件即可；其余源码、更新清单和校验文件供对应用途使用。
+
+| 设备 | 下载 6.3 | 安装方式 |
+|---|---|---|
+| Apple 芯片 Mac（M 系列），macOS 13+ | [下载 DMG](https://github.com/jackotom/hongguo-drama/releases/download/v6.3/Hongguo-6.3-mac-arm64.dmg) | 打开 DMG，拖入「应用程序」后启动；后续支持应用内更新 |
+| Intel Mac，macOS 13+ | [下载 DMG](https://github.com/jackotom/hongguo-drama/releases/download/v6.3/Hongguo-6.3-mac-x64.dmg) | 打开 DMG，拖入「应用程序」后启动；后续支持应用内更新 |
+| Windows x64（推荐安装版） | [下载安装版 EXE](https://github.com/jackotom/hongguo-drama/releases/download/v6.3/hongguo-downloader-6.3-win-x64-setup.exe) | 按向导安装，后续支持应用内更新 |
+| Windows x64（便携版） | [下载便携 EXE](https://github.com/jackotom/hongguo-drama/releases/download/v6.3/hongguo-downloader-6.3-win-x64.exe) · [下载便携 ZIP](https://github.com/jackotom/hongguo-drama/releases/download/v6.3/hongguo-downloader-6.3-win-x64.zip) | 直接运行 EXE；ZIP 解压后运行同一程序，后续仍需手动替换 |
+| Linux x64 | [下载 AppImage](https://github.com/jackotom/hongguo-drama/releases/download/v6.3/hongguo-downloader-6.3-linux-x64.AppImage) | 赋予执行权限后运行；需支持 Chromium 沙箱，解码问题可选择 CPU 软件模式；手动更新 |
+
+[查看已发布正式版](https://github.com/jackotom/hongguo-drama/releases/latest) · [6.3发行说明](docs/release-6.3.md) · [6.3发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v6.3) · [SHA256 校验文件](https://github.com/jackotom/hongguo-drama/releases/download/v6.3/SHA256SUMS.txt)
+
+
+- **升级到 6.3**：安装版保留应用内更新入口；完整6.2到6.3应用内更新尚未实测；也可退出旧程序后替换 Mac 应用或运行 Windows 安装包。便携版保留同目录的 `data` 后手动替换；1.75 及更早版本需要手动安装。
+- **后续更新**：Mac 与 Windows 安装版可在应用内下载新版，下载完成后由你点击重启安装，不强制升级。Windows 便携版继续通过发行页下载并手动替换。
+- **Mac**：6.3双架构 App 与 DMG 均已完成 Developer ID 签名、Apple 公证 Accepted 和票据装订。无需全局关闭 Gatekeeper；公证不等于 App Store 审核或内容授权。
+- **Windows**：安装版和便携版 EXE 尚未签名，可能出现系统安全提示。请核对官方下载来源；便携版首次启动会展开临时运行文件。安装版沿用原用户资料目录；3.4 起便携版把设置和下载记录放在程序目录的 `data` 文件夹，移动程序时请连同该文件夹一起保留。安装版与便携版不能同时运行（同一应用只允许一个实例）；更换版本前请先退出正在运行的窗口。
+- **普通使用只需上表安装文件**：发行页中的 Mac 更新 ZIP、`latest*.yml` 和 `.blockmap` 供更新程序使用；`source` 文件和 GitHub 自动生成的 Source code 是源码，不能直接运行。
+
+</details>
+
+本项目是社区维护的开源修改版，**不是红果、西饭、河马或DramaBox的官方客户端，也未获平台官方背书**。不提供付费分集解锁；剧集、清晰度和可用范围取决于来源平台。
+
+
+
 
 <details>
 <summary>3.9 历史下载与升级说明</summary>
@@ -72,13 +122,58 @@
 3. 打开详情点「立即播放」，也可选择集数与清晰度加入下载队列。
 4. 下次从「我的剧库」或「观看记录」接着看；下载进度、失败重试和整剧合并在「下载管理」。
 
-## 5.9 发行候选
+## 6.5
+
+- Docker Web/API支持搜索、NAS批量下载、分集合并与持久任务；Docker替代TV，双Mac、Windows、Linux、Docker五类产物同版发行。
+- 小窗可自定义隐藏后唤醒区域的位置和大小，支持拖动、缩放、百分比与预设，设置重启保留。
+- 横屏窗口内全屏保留弹幕与播放状态；相同弹幕聚合显示×N。
+- 已正式发布，25附件及对应源码/SHA256齐备；实际验收与平台限制见[6.5说明](docs/release-6.5.md)。
+
+## 6.4
+
+- 跟随系统、简体中文、English可切换并记忆；切换不重新挂载播放器，来源标题及简介保持原文。
+- 补齐英文界面、完整句式及Mac原生菜单；代理设置前置，连通测试保持严格TLS并有独立12秒取消。
+- 延续6.3取源、缓存与软件解码；本次明确授权先发桌面四平台，TV继续开发。
+- 已正式发布桌面四平台；双Mac签名／公证／装订，Windows未签名，真实下载、静音播放和语言验收范围见[6.4说明](docs/release-6.4.md)。未替换本机正式安装。
+
+## 6.3
+
+- 可选DramaBox公开目录、搜索、分集、播放与下载；默认关闭，受来源权限和网络地区限制。ReelShort仍为实验适配器。
+- 满足画质时优先兼容编码，复用完整同集缓存及已有准备任务，减少重复转换。
+- Mac arm64首次必要ByteVC2转换使用硬件H.264编码；本机真实137秒1080p样本平均33.83秒降至15.72秒，体积约增加53%，画质指标高于旧方案。其他硬件不外推。
+- 详情、验收和本轮四平台状态见[6.3说明](docs/release-6.3.md)。
+
+## 6.2
+
+- 优化切集画面交接、旧帧等待恢复及显示尺寸抓帧；暂停重载保持暂停，软件解码暂停状态更清晰。
+- 转码排队与执行分开显示，预缓存接管立即同步进度；修复取源终止码丢失后无效降档。
+- 修复观看记录只有第1、3、4季时，将缺失第2季误当作续作的问题；旧缓存、红点和系统通知采用同一最高已看季边界。
+- 有可见更新的组优先显示，保留组内季序和筛选；读取提醒后恢复最近观看顺序。
+- 本轮四平台发行，Android TV另行推进；#100切集转换和#114上游注册拒绝尚未确认修复。
+- 构建、签名、公证、发行和验证边界见[6.2说明](docs/release-6.2.md)。
+
+## 6.1
+
+- 播放器支持「从本集下载至末集」，跳过已完成、已排队和锁定集数。
+- 「解码方式 → 软件解码（CPU）」可在应用内直接软解 H.264/H.265，并记住选择。
+- 新增 Linux x64 AppImage；原生 Ubuntu 构建与启动检查通过，实际播放验证边界见发行说明。
+- 修复搜索联想列表随页面滚动悬留。
+- 代码、实际测试和环境限制见 [6.1 说明](docs/release-6.1.md)。
+
+## 6.0
+
+- ByteVC2 兼容转换共用单进程队列，解码与编码各限2线程，避免下载和预缓存叠加占满CPU。
+- 排队时当前播放优先；切到预缓存分集提升原任务优先级，降档后保持前台优先，不重复下载或转码。
+- 保留后续两集预缓存、画质选择、切集保帧与自动连播；取消时清掉排队任务和未完成输出。
+- 6.0 已正式发布；冻结时源码记录见 [6.0说明](docs/release-6.0.md)，最终发行状态以正式发行页为准。
+
+## 5.9
 
 - 统一公开版本5.9、内部版本5.9.0、三端产物命名与当前发行资料，保留历史版本记录。
 - 修复自动切集时旧画面持续遮挡；首帧回调过早到达后继续等待有效新帧。
 - 同组续作提示汇总去重，保留真实新集红点；点击续作不误清原剧的新集提醒。
 - 自动预缓存有界尝试1080P、720P及兼容片源，固定画质不自动降档，明确拒绝后停止重试。
-- 构建、签名、公证及三端验收状态见 [5.9候选说明](docs/release-5.9.md)。
+- 构建、签名、公证及三端验收状态见 [5.9发行说明](docs/release-5.9.md)。
 
 ## 5.8 下载、切集与详情改进
 
@@ -652,6 +747,8 @@ https://github.com/user-attachments/assets/b95f4f60-b57c-495f-a30e-62ac2b0bda11
 到 [Issues](https://github.com/jackotom/hongguo-drama/issues) 提供应用版本、操作系统与芯片类型、来源、复现步骤和错误提示。截图与日志请移除账号信息、Cookie、代理凭据及个人文件路径。
 
 ## 版本与验证范围
+
+当前正式版为6.5。双Mac签名、公证、装订；Windows、Linux、Docker真实流程与小窗原生鼠标验收通过，完整边界见[6.5回执](docs/release-6.5.md)。以下保留历史版本记录，不作为本版验收证据。
 
 4.1（内部 `4.1.0`，标签 `v4.1`）已正式发布，包含内置来源全局开关与文字导出。文字导出候选阶段的整剧验证结果为 80 个视频 `completed`、合计 `241881712` 字节；弹幕 80 份、386 条，其中 3 份为空；评论 25 份、307 条；剧评 1 份、4 条。另 55 集评论本次来源未开放，未生成空文件或误取其他集，网络与写盘实际失败为 0。该整剧原始资料随旧工作区回收而丢失，数值来自此前已观察的聊天回执，不作为本轮重新下载或播放的证据。加入来源开关后重新构建三端，204 项单元、91 项平台检查、Windows 安装及升级检查通过；Mac 完成签名、公证及装订，16 项附件摘要与大小一致。详见 [4.1 说明](docs/release-4.1.md)。
 

@@ -1,4 +1,5 @@
-// 红果短剧 5.9：桌面桥接入口，发行说明见 docs/release-5.9.md。
+// 红果短剧 6.5：版本及发行状态见 package.json 和 docs/release-6.5.md。
+// 红果短剧 6.2：桌面桥接入口，发行说明见 docs/release-6.0.md。
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -52,6 +53,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('app-update-preference', listener);
   },
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  setInterfaceLanguage: language => ipcRenderer.invoke('set-interface-language', language),
   openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
 
 
@@ -83,6 +85,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 在线播放（内存或临时磁盘缓存 + 自定义流协议）
   prepareOnlinePlay: (payload) => ipcRenderer.invoke('prepare-online-play', payload),
+  promoteOnlinePlay: (payload) => ipcRenderer.invoke('promote-online-play', payload),
   releaseOnlinePlay: (payload) => ipcRenderer.invoke('release-online-play', payload),
   onlineCacheStatus: () => ipcRenderer.invoke('online-cache-status'),
   discoverCastDevices: () => ipcRenderer.invoke('discover-cast-devices'),
@@ -136,6 +139,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSeriesEpisodes: (seriesId) => ipcRenderer.invoke('get-series-episodes', seriesId),
   downloadSingleEpisode: (seriesId, vidIndex, quality) =>
     ipcRenderer.invoke('download-single-episode', seriesId, vidIndex, quality),
+  downloadFollowingEpisodes: (seriesId, vidIndex, quality) =>
+    ipcRenderer.invoke('download-following-episodes', seriesId, vidIndex, quality),
   savePlaybackPosition: (seriesId, vidIndex, currentTime, metadata) =>
     ipcRenderer.invoke('save-playback-position', seriesId, vidIndex, currentTime, metadata),
   getPlaybackPosition: (seriesId) => ipcRenderer.invoke('get-playback-position', seriesId),

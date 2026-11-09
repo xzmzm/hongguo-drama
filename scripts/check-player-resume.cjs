@@ -1,4 +1,5 @@
 // Run: node scripts/check-player-resume.cjs [name-filter]. In-memory media only; no playback/network/files.
+const i18nStub = { t: require('../src/i18n/translator.mjs').formatMessage, useLanguage() {}, getLanguage: () => 'zh-CN' };
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -30,7 +31,7 @@ function mount({ local = false, localIndexes = [], localQuality, saved = null, t
   const stage = { ownerDocument: document, closest: selector => selector === '.main-content' ? scrollArea : null,
     requestFullscreen: async () => { document.fullscreenElement = stage; scrollArea.scrollTop = 0; documentEvents.get('fullscreenchange')?.(); } };
   let cursor = 0, tree, timerId = 0, oldSrc = '', oldKey;
-  let transcodeProgress;
+  let transcodeProgress, onlineProgress;
   const media = { currentTime: 0, duration: 100, readyState: 0, videoWidth: 640, paused: false,
     play: async () => {
       mediaCalls.play++;
@@ -68,6 +69,7 @@ function mount({ local = false, localIndexes = [], localQuality, saved = null, t
     prepareOnlinePlay: async p => { structuredClone(p); prepares.push(p); return prepare ? prepare(p) : { success: true, url: `hongguo-stream://mock-${prepares.length}` }; },
     transcodeForPlayback: async p => { transcodes.push(p); return transcode ? transcode(p) : { success: true, url: 'file:///mock-compat.mp4' }; },
     cancelTranscodeForPlayback: async p => cancelled.push(p),
+    onOnlinePlayProgress: fn => { onlineProgress = fn; return () => { onlineProgress = null; }; },
     onTranscodeProgress: fn => { transcodeProgress = fn; return () => { transcodeProgress = null; }; },
     getSettings: async () => ({ compat_mode: true, ...settings }),
     saveSettings: async s => { settingsSaved.push(s); return { success: true }; },
@@ -77,7 +79,7 @@ function mount({ local = false, localIndexes = [], localQuality, saved = null, t
     clearOnlineCache: async () => ({ success: true }),
     ...apiOverrides,
   };
-  const window = { localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) }, electronAPI: new Proxy(api, { get: (o, k) => o[k] || (k.startsWith('on') ? () => () => {} : async () => ({})) }),
+  const window = { localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) }, electronAPI: new Proxy(api, { get: (o, k) => k === 'enterNativePictureInPicture' ? o[k] : o[k] || (k.startsWith('on') ? () => () => {} : async () => ({})) }),
     addEventListener: (k, f, options) => { events.set(k, f); listenerOptions.set(k, options); },
     removeEventListener: k => { events.delete(k); listenerOptions.delete(k); },
     dispatchEvent: event => { events.get(event.type)?.(event); return !event.defaultPrevented; } };
@@ -86,7 +88,7 @@ function mount({ local = false, localIndexes = [], localQuality, saved = null, t
   const shortcutModule = { exports: {} };
   vm.runInNewContext(shortcutSource, { module: shortcutModule, exports: shortcutModule.exports, window, Event });
   const setTimer = (fn, delay) => { const id = ++timerId; timers.set(id, { fn, delay }); return id; };
-  const context = { module: { exports: {} }, Date: class extends Date { static now() { return now(); } }, require: n => n === 'react-dom' ? { createPortal: children => children } : n === './useFloatingPlayer' ? { __esModule: true, default: () => ({ host: {}, attachSlot() {}, floating, toggle() { floating = !floating; stage.ownerDocument = floating ? popupDocument : document; render(); } }) } : n === 'react' ? react : n === './useDialogKeyboard' ? () => {} : n === '../shortcuts' ? shortcutModule.exports : n === './VideoEnhancement' ? videoEnhancementStub : n === './danmakuSource.mjs' ? { useDanmakuSource: () => 'official', writeDanmakuSource() {} } : n === './OfficialDanmaku' ? { useOfficialDanmaku: ({ preferences, active }) => ({ ...preferences, active }) } : n === './CommentDanmaku' ? { useCommentDanmaku: () => ({ enabled: false, settings: {}, comments: [] }) } : {}, window, document, navigator: {}, crypto: require('node:crypto').webcrypto, setTimeout: setTimer, clearTimeout: id => timers.delete(id), setInterval: setTimer, clearInterval: id => timers.delete(id), requestAnimationFrame: fn => setTimer(fn, 0), cancelAnimationFrame: id => timers.delete(id), console };
+  const context = { module: { exports: {} }, Date: class extends Date { static now() { return now(); } }, require: n => n === '../i18n' ? i18nStub : n === 'react-dom' ? { createPortal: children => children } : n === './useFloatingPlayer' ? { __esModule: true, default: () => ({ host: {}, attachSlot() {}, floating, toggle() { floating = !floating; stage.ownerDocument = floating ? popupDocument : document; render(); } }) } : n === 'react' ? react : n === './useDialogKeyboard' ? () => {} : n === '../shortcuts' ? shortcutModule.exports : n === './VideoEnhancement' ? videoEnhancementStub : n === './danmakuSource.mjs' ? { useDanmakuSource: () => 'official', writeDanmakuSource() {} } : n === './OfficialDanmaku' ? { useOfficialDanmaku: ({ preferences, active }) => ({ ...preferences, active }) } : n === './CommentDanmaku' ? { useCommentDanmaku: () => ({ enabled: false, settings: {}, comments: [] }) } : {}, window, document, navigator: {}, crypto: require('node:crypto').webcrypto, setTimeout: setTimer, clearTimeout: id => timers.delete(id), setInterval: setTimer, clearInterval: id => timers.delete(id), requestAnimationFrame: fn => setTimer(fn, 0), cancelAnimationFrame: id => timers.delete(id), console };
   context.exports = context.module.exports;
   vm.runInNewContext(source, context);
   const nodes = () => { const out = []; const walk = n => { if (!n || typeof n !== 'object') return; out.push(n); n.children?.forEach(walk); }; walk(tree); return out; };
@@ -123,6 +125,7 @@ function mount({ local = false, localIndexes = [], localQuality, saved = null, t
     historyUpdated: payload => [...historyListeners].forEach(listener => listener(payload)),
     flushBatched: async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); render(); },
     transcodeProgress: payload => transcodeProgress?.(payload),
+    onlineProgress: payload => onlineProgress?.(payload),
     button: label => find(n => n.type === 'button' && text(n).includes(label)),
     enterFloatingPlayer: () => { floating = true; stage.ownerDocument = popupDocument; document.pictureInPictureElement = media; render(); },
     exitFloatingPlayer: () => document.exitPictureInPicture(),

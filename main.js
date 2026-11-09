@@ -1,5 +1,6 @@
+// Hongguo Drama 6.5: desktop runtime; server entry is server/index.cjs.
 /**
- * main.js - 红果短剧 5.9 下载器（独立版）主进程
+ * main.js - 红果短剧 6.2 下载器（独立版）主进程
  *
  * 功能：
  *   1. 红果短剧解析（分享链接 / series_id -> 全剧集列表）
@@ -69,6 +70,7 @@ const APP_VERSION = app.getVersion() || '1.0.0';
 
 const APP_TITLE = IS_PREVIEW ? '红果短剧预览' : '红果短剧';
 const { createStealthController } = require('./src/native/stealth-window');
+const { DEFAULT_STEALTH_WAKE_REGION, validateStealthWakeRegion, normalizeStealthWakeRegion } = require('./src/native/stealth-region');
 const { createBossKeyController } = require('./src/native/boss-key');
 
 const casting = require('./src/native/casting').createCastingService();
@@ -83,7 +85,7 @@ let pendingUpdateOperations = 0;
 let quitCleanup = null;
 let quitReady = false;
 let mergeTempCleanup = null;
-const UPDATE_BLOCKED_CHANNELS = new Set(['hongguo-download-batch', 'download-single-episode', 'download-series-to-nas', 'retry-task', 'retry-tasks', 'resume-all', 'merge-series', 'transcode-for-playback', 'prepare-online-play', 'start-casting', 'save-settings', 'set-boss-key']);
+const UPDATE_BLOCKED_CHANNELS = new Set(['hongguo-download-batch', 'download-single-episode', 'download-following-episodes', 'download-series-to-nas', 'retry-task', 'retry-tasks', 'resume-all', 'merge-series', 'transcode-for-playback', 'prepare-online-play', 'start-casting', 'save-settings', 'set-boss-key']);
 // 独立播放窗口：同一套界面只显示播放器，可同时看多部剧。
 const playerWindows = new Set();
 const PLAYER_WINDOW_LIMIT = 6;
@@ -252,6 +254,7 @@ function getDefaultSettings() {
     compat_mode: true,
     cache_next_episode: true,
     picture_in_picture_mode: 'custom',
+    stealth_wake_region: { ...DEFAULT_STEALTH_WAKE_REGION },
     app_updates_enabled: !IS_PREVIEW,
     watch_updates_enabled: true,
     watch_sequels_enabled: true,
@@ -282,7 +285,8 @@ let proxyApplyVersion = 0;
 let desiredProxyConfig = null;
 
 // proxy-from-env 2.1.0 没有 env 参数；按相同规则解析启动快照，测试与真实依赖逐例对照。
-function snapshotProxyUrl(targetUrl = 'https://www.baidu.com') {
+const PROXY_TEST_URL = 'https://hongguoduanju.com';
+function snapshotProxyUrl(targetUrl = PROXY_TEST_URL) {
   let target;
   try { target = new URL(targetUrl); } catch (_) { return null; }
   if (!target.host) return null;
@@ -507,6 +511,7 @@ async function applyProxyForStartup(settings) {
 function getCurrentSettings() {
   const saved = store.getSettings() || {};
   const merged = { ...getDefaultSettings(), ...saved };
+  merged.stealth_wake_region = normalizeStealthWakeRegion(merged.stealth_wake_region);
   // 保证并发数合法
   const mc = parseInt(merged.max_concurrent, 10);
   MAX_CONCURRENT_DOWNLOADS = Number.isInteger(mc) && mc >= 1 && mc <= 10 ? mc : 3;
@@ -1035,7 +1040,7 @@ async function executeHongguoDownload(task) {
       }
     }
     // Recheck source access before reusing an existing third-party file or URL.
-    const checkedPlayInfo = /^(xifan|hema|custom):/.test(String(vid))
+    const checkedPlayInfo = /^(xifan|hema|reelshort|dramabox|custom):/.test(String(vid))
       ? await hongguo.fetchPlayUrlSingle(vid, hongguoInfo?.series_id, { quality }) : null;
     if (checkedPlayInfo && !checkedPlayInfo.url) throw new Error(checkedPlayInfo.error || '来源未开放该集');
     // Existing complete files need no additional media transfer.
@@ -1051,27 +1056,62 @@ async function executeHongguoDownload(task) {
       return;
     }
     tmpPath = finalPath + '.enc.tmp';
-    const cached = onlineCache.get(onlineCacheKey(vid, quality)) || onlineCache.get(String(vid));
-    const sourceId = /^custom:[^:]+/.exec(String(vid))?.[0] || /^(xifan|hema):/.exec(String(vid))?.[1] || 'hongguo';
-    let reusedCache = false;
-    if (cached?.complete && cached.vid === String(vid) && cached.source === sourceId
+    const sourceId = /^custom:[^:]+/.exec(String(vid))?.[0] || /^(xifan|hema|reelshort|dramabox):/.exec(String(vid))?.[1] || 'hongguo';
+    const completeCache = cached => cached?.complete && cached.vid === String(vid) && cached.source === sourceId
       && cached.seriesId === String(hongguoInfo?.series_id || '') && cached.size > 0
-      && (cached.filePath || Buffer.isBuffer(cached.buffer) && cached.buffer.length === cached.size)) {
-      if (cached.filePath) {
-        cached.disk.readers = (cached.disk.readers || 0) + 1;
-        try { await fsp.copyFile(cached.filePath, tmpPath); }
-        finally { cached.disk.readers--; disposeOnlineDisk(cached); }
-      } else await fsp.writeFile(tmpPath, cached.buffer, { mode: 0o600 });
-      source.token.throwIfRequested();
-      try { task.actualQuality = await verifyDownloadQuality(tmpPath, quality, false, true, source.token); reusedCache = true; }
-      catch (_) { fs.unlinkSync(tmpPath); }
-      source.token.throwIfRequested();
-      checkCustomAccess(vid);
-      if (reusedCache) {
+      && (cached.filePath || Buffer.isBuffer(cached.buffer) && cached.buffer.length === cached.size);
+    let preparedCache;
+    const rejectedCaches = new Set();
+    // Cache keys describe the request, not measured output quality; verify the actual file before publishing.
+    const reuseCache = async () => {
+      const caches = new Set([onlineCache.get(onlineCacheKey(vid, quality)), onlineCache.get(String(vid)), preparedCache,
+        onlineCache.get(onlineCacheKey(vid, '1080p')), onlineCache.get(onlineCacheKey(vid, '720p')), ...onlineCache.values()]);
+      for (const cached of caches) {
+        if (!completeCache(cached) || rejectedCaches.has(cached)) continue;
+        if (cached.filePath) {
+          cached.disk.readers = (cached.disk.readers || 0) + 1;
+          try { await fsp.copyFile(cached.filePath, tmpPath); }
+          finally { cached.disk.readers--; disposeOnlineDisk(cached); }
+        } else await fsp.writeFile(tmpPath, cached.buffer, { mode: 0o600 });
+        source.token.throwIfRequested();
+        try { task.actualQuality = await verifyDownloadQuality(tmpPath, quality, false, true, source.token); }
+        catch (_) {
+          fs.unlinkSync(tmpPath);
+          source.token.throwIfRequested();
+          rejectedCaches.add(cached);
+          continue;
+        }
+        source.token.throwIfRequested();
+        checkCustomAccess(vid);
         publishDownloadFile(tmpPath, finalPath);
         task.receivedBytes = task.totalBytes = cached.size;
         cached.lastUsed = Date.now();
+        return true;
       }
+      return false;
+    };
+    let reusedCache = await reuseCache();
+    if (!reusedCache && /^\d{1,30}$/.test(String(vid))) {
+      const qualities = new Set([quality, 'auto', '1080p', ...(quality === '1080p' ? [] : ['720p'])]);
+      const pending = [...qualities].map(value => onlinePreparing.get(onlineCacheKey(vid, value))).find(job => job
+        && !job.controller.signal.aborted && [...onlineSessions.values()].some(session => session.job === job
+          && session.vid === String(vid) && session.seriesId === String(hongguoInfo?.series_id || '')));
+      if (pending) {
+        const controller = new AbortController(), cancel = () => controller.abort();
+        source.token.subscribe(cancel);
+        task.qualityNotice = '等待同集在线播放缓存准备完成，避免重复下载和转换';
+        sendToRenderer('download-progress', { id, qualityNotice: task.qualityNotice });
+        try { preparedCache = await awaitMediaOperation(pending.promise, controller.signal); }
+        catch (error) {
+          source.token.throwIfRequested();
+          if (isDownloadSourceRejection(error)) throw error;
+        } finally {
+          source.token.unsubscribe(cancel);
+          task.qualityNotice = '';
+          sendToRenderer('download-progress', { id, qualityNotice: '' });
+        }
+      }
+      reusedCache = await reuseCache();
     }
     if (!reusedCache) await withMediaRecovery(vid, hongguoInfo?.series_id, { playInfo: checkedPlayInfo, quality, allowLowerQuality, force: true, cancelToken: source.token }, async playInfo => {
       source.token.throwIfRequested();
@@ -1108,15 +1148,15 @@ async function executeHongguoDownload(task) {
         try {
           if (playInfo.codec === 'bytevc2') {
             const notice = task.qualityNotice;
-            const progress = seconds => {
+            const progress = (seconds, phase = 'transcoding') => {
               task.progress = Math.min(99, Math.floor(seconds / playInfo.duration * 100));
-              task.qualityNotice = '正在转换为可播放格式';
+              task.qualityNotice = phase === 'queued' ? '等待其他视频转换完成' : '正在转换为可播放格式';
               sendToRenderer('download-progress', { id, progress: task.progress, qualityNotice: task.qualityNotice });
             };
-            progress(0);
             try {
               await convertBytevc2({ executable: resolveFfmpeg('librempeg'), input: tmpPath, output: decodedPath,
-                contentKey: playInfo.contentKey, duration: playInfo.duration, cancelToken: source.token, onProgress: progress });
+                contentKey: playInfo.contentKey, duration: playInfo.duration, cancelToken: source.token, onProgress: progress,
+                onPhase: phase => progress(0, phase) });
             } finally { task.qualityNotice = notice || ''; }
           } else await decryptContentKeyFile(tmpPath, decodedPath, playInfo.contentKey, { cancelToken: source.token });
           task.actualQuality = await verifyReceived(decodedPath);
@@ -1546,12 +1586,15 @@ ipcMain.handle('test-custom-source', async (_event,draft) => {
 
 
 ipcMain.handle('browse-list', async (_event, options) => {
-  if (['xifan', 'hema'].includes(options?.source) && getCurrentSettings().builtin_sources?.[options.source] === false) return { success: false, results: [], error: '此来源已关闭，可在设置中重新开启' };
+  if ((['xifan', 'hema'].includes(options?.source) && getCurrentSettings().builtin_sources?.[options.source] === false)
+    || (['reelshort', 'dramabox'].includes(options?.source) && getCurrentSettings().builtin_sources?.[options.source] !== true)) return { success: false, results: [], error: '此来源已关闭，可在设置中重新开启' };
   if (proxyStartupFallback) return { success: false, error: '网络代理配置无效，请先在设置中修复或明确关闭代理。' };
   if ((!options?.source || options.source === 'hongguo') && options?.catalogChannel != null
     && !['app', 'web'].includes(options.catalogChannel)) return { success: false, error: '不支持的红果目录线路' };
   const moduleName = String(options?.source).startsWith('custom:') ? './src/native/custom-source' : options?.source === 'hema' ? './src/native/hema'
     : options?.source === 'xifan' ? './src/native/xifan'
+    : options?.source === 'reelshort' ? './src/native/reelshort'
+    : options?.source === 'dramabox' ? './src/native/dramabox'
       : options?.catalogChannel === 'web' ? './src/native/catalog' : './src/native/hongguo-app-catalog';
   const catalogOptions = moduleName === './src/native/catalog'
     ? { ...options, allowTrustedDns: resolveProxyConfig(getCurrentSettings()).mode === 'direct' } : options;
@@ -1634,7 +1677,8 @@ async function searchAtSource(keyword, options = {}) {
   const page = options.page === undefined ? 1 : options.page;
   if (!Number.isSafeInteger(page) || page < 1 || page > 50) throw new Error('搜索页码必须是 1 至 50 的整数');
   const source = options.source || 'hongguo';
-  if (['xifan', 'hema'].includes(source) && getCurrentSettings().builtin_sources?.[source] === false) throw new Error('此来源已关闭，可在设置中重新开启');
+  if ((['xifan', 'hema'].includes(source) && getCurrentSettings().builtin_sources?.[source] === false)
+    || (['reelshort', 'dramabox'].includes(source) && getCurrentSettings().builtin_sources?.[source] !== true)) throw new Error('此来源已关闭，可在设置中重新开启');
   if (page > 1 && source !== 'hongguo' && options.channel && options.channel !== source) throw new Error('搜索通道已变化，请重新搜索');
   const response = await searchAtSourcePage(keyword, { ...options, page });
   if (!response?.success) return response;
@@ -1649,6 +1693,8 @@ async function searchAtSourcePage(keyword, options = {}) {
   if (String(options?.source).startsWith('custom:')) return require('./src/native/custom-source').searchSeries(keyword, options);
   if (options?.source === 'hema') return require('./src/native/hema').search(keyword, options.page, { deadline });
   if (options?.source === 'xifan') return require('./src/native/xifan').search(keyword, options.page, { deadline });
+  if (options?.source === 'reelshort') return require('./src/native/reelshort').search(keyword, options.page, { deadline });
+  if (options?.source === 'dramabox') return require('./src/native/dramabox').search(keyword, options.page, { deadline });
   if (options?.source && options.source !== 'hongguo') throw new Error('不支持的搜索来源');
   const page = options.page;
   const searchQuery = normalizeSearchTitle(keyword);
@@ -2230,7 +2276,7 @@ ipcMain.handle('get-merge-tasks', async () => mergeTasks.map(({ child, ...rest }
 function seriesDownloadDir(root, seriesId, seriesTitle) {
   const title = sanitizeFolderName(seriesTitle) || '未命名短剧';
   const suffix = createHash('sha256').update(String(seriesId)).digest('hex').slice(0, 12);
-  return path.join(root, String(seriesId).startsWith('hema:') ? '河马短剧' : String(seriesId).startsWith('xifan:') ? '西饭短剧' : '红果短剧', `${title}-${suffix}`);
+  return path.join(root, String(seriesId).startsWith('dramabox:') ? 'DramaBox' : String(seriesId).startsWith('reelshort:') ? 'ReelShort' : String(seriesId).startsWith('hema:') ? '河马短剧' : String(seriesId).startsWith('xifan:') ? '西饭短剧' : '红果短剧', `${title}-${suffix}`);
 }
 
 /** 找到某剧在磁盘上的目录（优先用任务记录，其次按标题推导） */
@@ -2244,7 +2290,7 @@ function resolveSeriesDir(seriesId, seriesTitle, covers) {
   const guess = seriesDownloadDir(root, seriesId, seriesTitle);
   if (fs.existsSync(guess)) return guess;
   // Older versions used title-only directories. Reuse only when ownership is unambiguous.
-  if (!/^(xifan|hema|custom):/.test(String(seriesId))) {
+  if (!/^(xifan|hema|reelshort|dramabox|custom):/.test(String(seriesId))) {
     const title = sanitizeFolderName(seriesTitle) || '未命名短剧';
     const owners = seriesRegistry.filter(s => sanitizeFolderName(s.series_title) === title);
     const legacy = path.join(root, '红果短剧', title);
@@ -2661,7 +2707,7 @@ ipcMain.handle('play-series', async (event, payload) => {
 // ===== 在线播放 =====
 function playbackQuality(value = 'auto', vid = '') {
   if (!['auto', '720p', '1080p'].includes(value)) throw new Error('在线播放清晰度无效，请选择自动、720p 或 1080p');
-  if (value !== 'auto' && /^(xifan|hema|custom):/.test(String(vid))) throw new Error('此来源暂不支持指定在线播放清晰度，请选择自动');
+  if (value !== 'auto' && /^(xifan|hema|reelshort|dramabox|custom):/.test(String(vid))) throw new Error('此来源暂不支持指定在线播放清晰度，请选择自动');
   return value;
 }
 
@@ -2695,10 +2741,11 @@ async function requestMedia(playInfo, options = {}) {
   const url = new URL(playInfo.url);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('无效播放地址');
   checkCustomAccess(playInfo.vid);
-  const custom = playInfo.source === 'custom';
+  const custom = ['custom', 'reelshort'].includes(playInfo.source);
   const web = playInfo.source === 'web';
   const config = { method: 'GET', url: url.href, responseType: 'stream', timeout: 60000, ...options,
     ...((web || custom) ? require('./src/native/web-media-guard').webMediaRequestOptions(url.href) : {}),
+    ...(playInfo.source === 'dramabox' ? require('./src/native/dramabox').mediaRequestOptions(url.href) : {}),
     headers: { 'User-Agent': playInfo.userAgent || (web ? hongguo.WEB_UA : hongguo.UA), 'Accept-Encoding': 'identity',
       ...((playInfo.referer || web) ? { Referer: playInfo.referer || hongguo.WEB_REFERER } : {}), ...options.headers } };
   let response;
@@ -3111,9 +3158,10 @@ async function fetchDecryptedEpisodeOnce(vid, onProgress, seriesId, playInfo, si
       await pipeline(response.data, fs.createWriteStream(input, { mode: 0o600 }), { signal });
       if (!received || (total && received !== total)) throw mediaTransferError('视频下载不完整，请重试');
       if (playInfo.codec === 'bytevc2') {
-        onProgress?.(0, received, 'transcoding');
         await convertBytevc2({ executable: resolveFfmpeg('librempeg'), input, output,
           contentKey: playInfo.contentKey, duration: playInfo.duration, signal, maxBytes,
+          onPhase: phase => onProgress?.(0, received, phase),
+          getPriority: () => [...onlineSessions.values()].some(session => session.vid === String(vid) && !session.prefetch) ? 2 : 1,
           onProgress: seconds => onProgress?.(Math.floor(received * Math.min(1, seconds / playInfo.duration)), received, 'transcoding') });
       } else {
         if (onProgress) onProgress(received, received, 'decrypting');
@@ -3163,11 +3211,11 @@ ipcMain.handle('prepare-online-play', async (event, payload) => {
   let quality;
   try { quality = playbackQuality(payload.quality, vid); } catch (error) { return { success: false, error: error.message }; }
   const sourceVid = String(vid), key = onlineCacheKey(sourceVid, quality), streamId = randomUUID();
-  const session = { vid: sourceVid, seriesId: String(seriesId || ''), vidIndex: Number(vidIndex), cacheKey: key, requestId, requests: new Set(), entry: null, owner: event?.sender?.id };
+  const session = { vid: sourceVid, seriesId: String(seriesId || ''), vidIndex: Number(vidIndex), cacheKey: key, requestId, prefetch, requests: new Set(), entry: null, owner: event?.sender?.id };
   onlineSessions.set(streamId, session);
   try {
     checkCustomAccess(sourceVid);
-    const checkedPlayInfo = /^(xifan|hema|custom):/.test(sourceVid) ? await hongguo.fetchPlayUrlSingle(sourceVid, seriesId, { force, quality }) : null;
+    const checkedPlayInfo = /^(xifan|hema|reelshort|dramabox|custom):/.test(sourceVid) ? await hongguo.fetchPlayUrlSingle(sourceVid, seriesId, { force, quality }) : null;
     if (!onlineSessions.has(streamId)) throw new Error('已取消播放');
     if (checkedPlayInfo && !checkedPlayInfo.url) throw new Error(checkedPlayInfo.error || '来源未开放该集');
     if (force) deleteOnlineCacheEntry(key);
@@ -3179,9 +3227,9 @@ ipcMain.handle('prepare-online-play', async (event, payload) => {
         job = { controller, force };
         job.promise = trackOnlineWork(controller, (async () => {
           const progress = (received,total,phase) => {
+            job.progress = { received, total, percent: total ? Math.floor(received / total * 100) : 0, phase: phase || 'downloading' };
             for (const active of onlineSessions.values()) if (active.cacheKey === key) {
-              sendToRenderer('online-play-progress',{vid:sourceVid,seriesId,vidIndex,requestId:active.requestId,
-                received,total,percent:total?Math.floor(received/total*100):0,phase:phase||'downloading'});
+              sendToRenderer('online-play-progress',{vid:sourceVid,seriesId,vidIndex,requestId:active.requestId, ...job.progress});
             }
           };
           const prepared = await withMediaRecovery(sourceVid,seriesId,{playInfo:checkedPlayInfo,quality,force,signal:controller.signal},async playInfo => {
@@ -3193,7 +3241,7 @@ ipcMain.handle('prepare-online-play', async (event, payload) => {
               entry.size = entry.buffer.length;
             }
             if (controller.signal.aborted) throw new Error('已取消播放');
-            Object.assign(entry,{vid:sourceVid,source:/^custom:[^:]+/.exec(sourceVid)?.[0] || /^(xifan|hema):/.exec(sourceVid)?.[1] || 'hongguo',complete:true});
+            Object.assign(entry,{vid:sourceVid,source:/^custom:[^:]+/.exec(sourceVid)?.[0] || /^(xifan|hema|reelshort|dramabox):/.exec(sourceVid)?.[1] || 'hongguo',complete:true});
             return entry;
           });
           prepared.lastUsed = Date.now();
@@ -3205,6 +3253,7 @@ ipcMain.handle('prepare-online-play', async (event, payload) => {
         onlinePreparing.set(key, job);
       }
       session.job = job;
+      if (job.progress) sendToRenderer('online-play-progress', { vid: sourceVid, seriesId, vidIndex, requestId, ...job.progress });
       entry = await job.promise;
     }
     if (!onlineSessions.has(streamId)) throw new Error('已取消播放');
@@ -3216,6 +3265,17 @@ ipcMain.handle('prepare-online-play', async (event, payload) => {
     return { success: false, error: error.message, code: error.code,
       ...(Array.isArray(error.sources) ? { sources: error.sources.map(({ source, code }) => ({ source, code })) } : {}) };
   }
+});
+
+ipcMain.handle('promote-online-play', (event, payload = {}) => {
+  for (const session of onlineSessions.values()) {
+    if (payload.requestId && session.requestId === payload.requestId) {
+      session.prefetch = false;
+      if (session.job?.progress) sendToRenderer('online-play-progress', { vid: session.vid, seriesId: session.seriesId,
+        vidIndex: session.vidIndex, requestId: session.requestId, ...session.job.progress });
+    }
+  }
+  return { success: true };
 });
 
 ipcMain.handle('release-online-play', async (event, payload = {}) => {
@@ -3544,7 +3604,7 @@ async function transcodeForPlayback(payload, job = { controller: new AbortContro
     if (filePath && fs.existsSync(filePath) && !isInsideMediaRoot(filePath) && !isRecordedMediaFile(filePath, payload)) {
       return { success: false, error: '只能转码下载目录中的视频' };
     }
-    if (!(filePath && fs.existsSync(filePath)) && (/^(xifan|hema|custom):/.test(String(seriesId)) || /^(xifan|hema|custom):/.test(String(payload.vid)))) {
+    if (!(filePath && fs.existsSync(filePath)) && (/^(xifan|hema|reelshort|dramabox|custom):/.test(String(seriesId)) || /^(xifan|hema|reelshort|dramabox|custom):/.test(String(payload.vid)))) {
       const current = await hongguo.fetchEpisodeList(seriesId);
       checkCancelled();
       const episode = current.episodes.find(ep => Number(ep.vid_index) === Number(vidIndex));
@@ -3570,7 +3630,7 @@ async function transcodeForPlayback(payload, job = { controller: new AbortContro
       const cached = !force && onlineCache.get(onlineCacheKey(vid, quality));
       if (cached?.filePath) { diskInput = cached; cached.disk.readers++; inputPath = cached.filePath; }
       else {
-        const playInfo = String(vid).startsWith('custom:') ? await hongguo.fetchPlayUrlSingle(String(vid),seriesId,{force:!!force,quality}) : null;
+        const playInfo = /^(custom|reelshort|dramabox):/.test(String(vid)) ? await hongguo.fetchPlayUrlSingle(String(vid),seriesId,{force:!!force,quality}) : null;
         tmpInput = path.join(getCompatDir(), `.tmp_${randomUUID()}.mp4`);
         if (playInfo) await withMediaRecovery(vid,seriesId,{playInfo,signal,quality},async candidate => {
           if (candidate.format === 'hls') await prepareHlsFile(candidate,tmpInput,{signal});
@@ -3734,7 +3794,7 @@ async function enqueueEpisodes({ seriesId, seriesTitle, episodes, cover, quality
   if (!Array.isArray(episodes) || episodes.length === 0) return 0;
   const settings = getCurrentSettings();
   const downloadQuality = normalizeDownloadQuality(quality ?? settings.download_quality);
-  if (/^(xifan|hema|custom):/.test(String(seriesId))) {
+  if (/^(xifan|hema|reelshort|dramabox|custom):/.test(String(seriesId))) {
     const current = await hongguo.fetchEpisodeList(seriesId);
     episodes = episodes.map(requested => {
       const ep = current.episodes.find(item => item.vid === requested.vid && Number(item.vid_index) === Number(requested.vid_index));
@@ -3742,7 +3802,7 @@ async function enqueueEpisodes({ seriesId, seriesTitle, episodes, cover, quality
       if (ep.locked) throw new Error('该集已锁定，请在来源平台解锁');
       return ep;
     });
-  } else if (episodes.some(ep => /^(xifan|hema|custom):/.test(String(ep.vid)))) {
+  } else if (episodes.some(ep => /^(xifan|hema|reelshort|dramabox|custom):/.test(String(ep.vid)))) {
     throw new Error('剧集来源不匹配');
   }
 
@@ -3897,6 +3957,24 @@ async function enqueueEpisodes({ seriesId, seriesTitle, episodes, cover, quality
   pumpQueue();
   return created;
 }
+
+const followingSubmissions = new Set();
+ipcMain.handle('download-following-episodes', async (_event, seriesId, vidIndex, quality) => {
+  const sid = String(seriesId || '');
+  if (followingSubmissions.has(sid)) return { success: false, error: '本剧正在提交下载，请稍候' };
+  if (!Number.isSafeInteger(vidIndex) || vidIndex < 1) return { success: false, error: '起始集数无效' };
+  const entry = seriesRegistry.find(item => String(item.series_id) === sid);
+  if (!entry?.episodes?.some(ep => ep.vid_index === vidIndex)) return { success: false, error: '未找到起始分集，请重新打开剧集' };
+  followingSubmissions.add(sid);
+  try {
+    const episodes = entry.episodes.filter(ep => ep.vid_index >= vidIndex && !ep.locked && !downloadTasks.some(task =>
+      String(task.hongguoInfo?.series_id) === sid && String(task.hongguoInfo?.vid) === String(ep.vid)
+      && (['pending', 'downloading'].includes(task.status) || task.status === 'completed' && hasCompleteTaskFile(task))));
+    const count = episodes.length ? await enqueueEpisodes({ seriesId: sid, seriesTitle: entry.series_title, episodes, quality }) : 0;
+    return { success: true, count };
+  } catch (error) { return { success: false, error: error.message || '提交后续剧集失败' }; }
+  finally { followingSubmissions.delete(sid); }
+});
 
 const nasSubmissions = new Set();
 ipcMain.handle('download-series-to-nas', async (_event, seriesId, quality, options = {}) => {
@@ -4192,9 +4270,12 @@ async function checkHistoryRow(row, context) {
       if (!currentSeries) return { status: 'skipped' };
       const previousRecord = map[sid];
       const next = watchHistory.applyEpisodeUpdate(previousRecord, currentSeries, fresh);
+      // A higher season may have been watched while either network request was pending.
+      const latestSeason = sequelResponse ? historyFamilyRows(watchHistory.listHistory(seriesRegistry, map, false), currentSeries)
+        .reduce((latest, item) => Math.max(latest, item.season), 0) : 0;
       if (sequelResponse) {
-        const candidates = watchHistory.findSequels(currentSeries, sequelResponse.candidates || sequelResponse.results || []);
-        const combined = new Map((previousRecord.sequels || []).map(item => [item.series_id, item]));
+        const candidates = watchHistory.findSequels(currentSeries, sequelResponse.candidates || sequelResponse.results || [], latestSeason);
+        const combined = new Map(watchHistory.findSequels(currentSeries, previousRecord.sequels || [], latestSeason).map(item => [item.series_id, item]));
         for (const item of candidates) combined.set(item.series_id, item);
         next.sequels = [...combined.values()].slice(-20);
         next.similarSeries = watchHistory.findSimilarSeries(currentSeries,
@@ -4206,7 +4287,7 @@ async function checkHistoryRow(row, context) {
       const newEpisodes = next.knownTotal > (previousRecord.knownTotal ?? currentSeries.total ?? currentSeries.episodes?.length ?? 0);
       const knownSequels = new Set((previousRecord.sequels || []).map(item => item.series_id));
       const rowCandidates = sequelResponse
-        ? watchHistory.findSequels(currentSeries, sequelResponse.candidates || sequelResponse.results || [])
+        ? watchHistory.findSequels(currentSeries, sequelResponse.candidates || sequelResponse.results || [], latestSeason)
         : [];
       const newSequel = sequelResponse?.success === true && rowCandidates.some(item => !knownSequels.has(item.series_id));
       if (fresh.episodes.length >= (currentSeries.episodes?.length || 0)) {
@@ -4442,7 +4523,7 @@ ipcMain.handle('select-folder', async () => {
   return result.filePaths[0];
 });
 
-const SETTINGS_KEYS = ['root', 'name_format', 'max_concurrent', 'download_quality', 'download_metadata', 'export_text', 'auto_delete_watched', 'compat_mode', 'cache_next_episode', 'picture_in_picture_mode', 'show_danmaku_controls', 'app_updates_enabled', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'fast_cdn_host', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'];
+const SETTINGS_KEYS = ['root', 'name_format', 'max_concurrent', 'download_quality', 'download_metadata', 'export_text', 'auto_delete_watched', 'compat_mode', 'cache_next_episode', 'picture_in_picture_mode', 'stealth_wake_region', 'show_danmaku_controls', 'app_updates_enabled', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'fast_cdn_host', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'];
 
 function normalizeTextExportKinds(value) {
   return { danmaku: value?.danmaku === true, comments: value?.comments === true, reviews: value?.reviews === true };
@@ -4464,6 +4545,7 @@ function applyEditableSettings(current, incoming) {
     if (key === 'proxy_password') continue;
     if (Object.prototype.hasOwnProperty.call(source, key)) merged[key] = source[key];
   }
+  if (Object.prototype.hasOwnProperty.call(source, 'stealth_wake_region')) merged.stealth_wake_region = validateStealthWakeRegion(source.stealth_wake_region);
   if (Object.prototype.hasOwnProperty.call(source, 'export_text')) merged.export_text = normalizeTextExportKinds(source.export_text);
   if (source.clear_proxy_password === true) merged.proxy_password = '';
   else if (typeof source.proxy_password === 'string' && source.proxy_password.length > 0) merged.proxy_password = source.proxy_password;
@@ -4545,9 +4627,12 @@ ipcMain.handle('test-proxy', async (event, draft) => {
   }
 
   const started = Date.now();
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), 12000);
   try {
-    const res = await axios.get('https://www.baidu.com', {
+    const res = await axios.get(PROXY_TEST_URL, {
       timeout: 12000,
+      signal: controller.signal,
       proxy: proxyOption,
       headers: { 'User-Agent': 'Mozilla/5.0' },
       validateStatus: () => true,
@@ -4559,7 +4644,7 @@ ipcMain.handle('test-proxy', async (event, draft) => {
         elapsed: ms,
         mode: resolved.mode,
         via: publicProxyUrl(resolved.url) || '(直连)',
-        message: `API/下载连通正常（HTTP ${res.status}，耗时 ${ms}ms）`,
+        message: `红果官网连接正常（HTTP ${res.status}，耗时 ${ms}ms）`,
       };
     }
     return { success: false, error: `请求返回 HTTP ${res.status}（耗时 ${ms}ms）` };
@@ -4567,11 +4652,14 @@ ipcMain.handle('test-proxy', async (event, draft) => {
     const ms = Date.now() - started;
     const code = (error && error.code) || '';
     let hint = publicProxyError(error.message, settings, resolved);
-    if (code === 'ECONNREFUSED') hint = '代理端口拒绝连接，请确认代理软件已启动、端口填写正确';
-    else if (code === 'ETIMEDOUT' || code === 'ECONNABORTED') hint = '连接超时，请检查代理地址/端口或代理是否可用';
+    if (['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'CERT_HAS_EXPIRED', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN', 'ERR_TLS_CERT_ALTNAME_INVALID'].includes(code)) hint = `测试站点证书校验失败，连接已拒绝；请检查系统时间、证书链或代理的 HTTPS 配置（${code}）`;
+    else if (code === 'ECONNREFUSED') hint = '代理端口拒绝连接，请确认代理软件已启动、端口填写正确';
+    else if (controller.signal.aborted || code === 'ETIMEDOUT' || code === 'ECONNABORTED') hint = '连接超时，请检查代理地址/端口或代理是否可用';
     else if (code === 'ENOTFOUND') hint = '无法解析代理地址，请检查主机名';
     else if (/407/.test(hint)) hint = '代理需要认证，请填写用户名与密码';
     return { success: false, error: `${hint}（耗时 ${ms}ms）`, code };
+  } finally {
+    clearTimeout(deadline);
   }
 });
 
@@ -5176,6 +5264,50 @@ ipcMain.handle('get-episode-danmaku', async (_event, options) => {
   return fetchDanmaku({ seriesId, vid, fresh, limit });
 });
 
+function applyInterfaceLanguage(language) {
+  const label = (zh, en) => language === 'en' ? en : zh;
+  const appName = label(APP_TITLE, IS_PREVIEW ? 'Hongguo Drama Preview' : 'Hongguo Drama');
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setTitle?.(appName);
+  if (process.platform !== 'darwin') return;
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: appName, submenu: [
+      { role: 'about', label: label(`关于${APP_TITLE}`, `About ${appName}`) },
+      { type: 'separator' },
+      { role: 'services', label: label('服务', 'Services') },
+      { type: 'separator' },
+      { role: 'hide', label: label('隐藏', 'Hide') },
+      { role: 'hideOthers', label: label('隐藏其他应用', 'Hide Others') },
+      { role: 'unhide', label: label('显示全部', 'Show All') },
+      { type: 'separator' },
+      { role: 'quit', label: label('退出', 'Quit') },
+    ] },
+    { label: label('编辑', 'Edit'), submenu: [
+      { role: 'undo', label: label('撤销', 'Undo') }, { role: 'redo', label: label('重做', 'Redo') },
+      { type: 'separator' },
+      { role: 'cut', label: label('剪切', 'Cut') }, { role: 'copy', label: label('复制', 'Copy') },
+      { role: 'paste', label: label('粘贴', 'Paste') }, { role: 'selectAll', label: label('全选', 'Select All') },
+    ] },
+    { label: label('视图', 'View'), submenu: [
+      { label: label('实际大小', 'Actual Size'), accelerator: 'CmdOrCtrl+0', click: () => changeMainWindowZoom('reset') },
+      { label: label('放大', 'Zoom In'), accelerator: 'CmdOrCtrl+Plus', click: () => changeMainWindowZoom('in') },
+      { label: label('缩小', 'Zoom Out'), accelerator: 'CmdOrCtrl+-', click: () => changeMainWindowZoom('out') },
+      { type: 'separator' }, { role: 'togglefullscreen', label: label('全屏', 'Full Screen') },
+    ] },
+    { label: label('窗口', 'Window'), submenu: [
+      { role: 'minimize', label: label('最小化', 'Minimize') }, { role: 'close', label: label('关闭窗口', 'Close Window') },
+      { type: 'separator' },
+      { label: label('回到主窗口', 'Return to Main Window'), accelerator: 'CmdOrCtrl+1', click: () => app.emit('activate') },
+      { label: label('退出隐身小窗', 'Exit Mini Window'), click: () => { stealth.setEnabled(false); syncMainWindowScale(); } },
+    ] },
+  ]));
+}
+
+ipcMain.handle('set-interface-language', (_event, language) => {
+  if (!['zh-CN', 'en'].includes(language)) return { success: false, error: 'Unsupported interface language' };
+  applyInterfaceLanguage(language);
+  return { success: true };
+});
+
 ipcMain.handle('get-app-info', async () => ({
   version: APP_VERSION,
   brand: APP_TITLE,
@@ -5183,6 +5315,8 @@ ipcMain.handle('get-app-info', async () => ({
   platform: process.platform,
   preview: IS_PREVIEW,
   dataDir: app.getPath('userData'),
+  systemLocale: (await import('./src/native/ui-language.mjs')).systemLocale(
+    process.env, app.getPreferredSystemLanguages?.()[0] || app.getLocale(), process.platform),
   configMode: portableConfig.mode,
   configNote: portableConfig.reason || '',
 }));
@@ -5206,7 +5340,7 @@ ipcMain.handle('open-external-url', async (event, url) => {
 let windowLayout = 'landscape';
 let landscapeBounds = null;
 let layoutChanging = false;
-const stealth = createStealthController({ screen, BaseWindow, View, getWindow: () => mainWindow });
+const stealth = createStealthController({ screen, BaseWindow, View, getWindow: () => mainWindow, getWakeRegion: () => getCurrentSettings().stealth_wake_region });
 const bossKey = createBossKeyController({ globalShortcut, getWindows: () => BaseWindow.getAllWindows(), getMainWindow: () => mainWindow, store,
   dock: process.platform === 'darwin' ? app.dock : undefined });
 ipcMain.handle('get-boss-key-state', () => bossKey.getState());
@@ -5521,37 +5655,7 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
 
     if (process.platform === 'darwin') {
       app.setAboutPanelOptions?.({ applicationVersion: APP_VERSION.replace(/^(\d+\.\d+)\.0$/, '$1'), version: '' });
-      Menu.setApplicationMenu(Menu.buildFromTemplate([
-        { label: APP_TITLE, submenu: [
-          { role: 'about', label: `关于${APP_TITLE}` },
-          { type: 'separator' },
-          { role: 'services', label: '服务' },
-          { type: 'separator' },
-          { role: 'hide', label: '隐藏' },
-          { role: 'hideOthers', label: '隐藏其他应用' },
-          { role: 'unhide', label: '显示全部' },
-          { type: 'separator' },
-          { role: 'quit', label: '退出' },
-        ] },
-        { label: '编辑', submenu: [
-          { role: 'undo', label: '撤销' }, { role: 'redo', label: '重做' },
-          { type: 'separator' },
-          { role: 'cut', label: '剪切' }, { role: 'copy', label: '复制' },
-          { role: 'paste', label: '粘贴' }, { role: 'selectAll', label: '全选' },
-        ] },
-        { label: '视图', submenu: [
-          { label: '实际大小', accelerator: 'CmdOrCtrl+0', click: () => changeMainWindowZoom('reset') },
-          { label: '放大', accelerator: 'CmdOrCtrl+Plus', click: () => changeMainWindowZoom('in') },
-          { label: '缩小', accelerator: 'CmdOrCtrl+-', click: () => changeMainWindowZoom('out') },
-          { type: 'separator' }, { role: 'togglefullscreen', label: '全屏' },
-        ] },
-        { label: '窗口', submenu: [
-          { role: 'minimize', label: '最小化' }, { role: 'close', label: '关闭窗口' },
-          { type: 'separator' },
-          { label: '回到主窗口', accelerator: 'CmdOrCtrl+1', click: () => app.emit('activate') },
-          { label: '退出隐身小窗', click: () => { stealth.setEnabled(false); syncMainWindowScale(); } },
-        ] },
-      ]));
+      applyInterfaceLanguage(/^zh(?:[-_.@]|$)/i.test(app.getPreferredSystemLanguages?.()[0] || app.getLocale()) ? 'zh-CN' : 'en');
     }
     // Warm the official-host trusted DNS cache before the first catalog card request.
     // This is best-effort and must never block startup or a user action.

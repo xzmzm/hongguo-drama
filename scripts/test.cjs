@@ -15,6 +15,9 @@ const skip = new Set([
   'check-merge-benchmark.cjs',
   'check-error-boundary.cjs',
   'check-danmaku-live.cjs',
+  'check-linux-media.cjs',
+  'check-linux-appimage.cjs',
+  'check-docker-release.cjs',
 ]);
 
 function run(args) {
@@ -32,12 +35,14 @@ const checks = fs.readdirSync(__dirname)
 
 let failed = 0;
 const unitTests = [
+  'src/components/touchHoldSpeed.test.mjs',
   ...fs.readdirSync(path.join(root, 'src/components/__tests__')).filter((name) => name.endsWith('.mjs')).map((name) => path.join('src/components/__tests__', name)),
   ...fs.readdirSync(path.join(root, 'src/native')).filter((name) => name.endsWith('.test.cjs')).map((name) => path.join('src/native', name)),
 ];
 if (!run(['--test', ...unitTests])) failed++;
 if (!run(['src/components/check-ui-state.cjs'])) failed++;
 if (!run(['scripts/check-windows-installer.cjs', '--config'])) failed++;
+if (!run(['scripts/check-linux-media.cjs', '--config'])) failed++;
 for (const name of checks) {
   if (!run([path.join('scripts', name)])) failed++;
 }
@@ -45,5 +50,5 @@ if (failed) {
   console.error(`npm test: ${failed} command(s) failed`);
   process.exitCode = 1;
 } else {
-  console.log(`npm test: unit tests and ${checks.length + 2} platform checks passed`);
+  console.log(`npm test: unit tests and ${checks.length + 3} platform checks passed`);
 }
