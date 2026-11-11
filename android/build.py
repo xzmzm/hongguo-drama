@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import shutil
 import subprocess
@@ -12,6 +13,15 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent
 BUILD = ROOT / 'build'
+
+def tv_version_metadata(candidate):
+    if not isinstance(candidate, str) or not re.fullmatch(r'(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)', candidate):
+        raise SystemExit('android/package.json 的 tvVersion 必须为三段数字版本（如 6.6.0），无前导零，次版本和补丁号须在 0–99 内')
+    major, minor, patch = map(int, candidate.split('.'))
+    version_code = major * 10000 + minor * 100 + patch
+    if not 0 < version_code <= 2100000000:
+        raise SystemExit('TV versionCode 必须在 Android 允许的 1–2100000000 内')
+    return candidate.removesuffix('.0'), version_code
 
 def run(args, env=None):
     result = subprocess.run([str(a) for a in args], cwd=ROOT, env=env, text=True, capture_output=True)
@@ -22,13 +32,11 @@ def run(args, env=None):
 
 def main():
     global BUILD
-    if '--tv' not in sys.argv:
-        raise SystemExit('本发行仅提供TV构建：python3 android/build.py --tv')
-    tv = True
+    tv = '--tv' in sys.argv
     if tv: BUILD = BUILD / 'tv'
     desktop_version = json.loads((ROOT.parent/'package.json').read_text())['version']
-    version = desktop_version.removesuffix('.0') if tv else '1.1'
-    version_code = int(desktop_version.split('.')[0]) * 10000 + int(desktop_version.split('.')[1]) * 100 if tv else 2
+    tv_version = json.loads((ROOT/'package.json').read_text()).get('tvVersion') if tv else None
+    version, version_code = tv_version_metadata(tv_version) if tv else ('1.1', 2)
     package_name = 'io.github.hongguo.tv' if tv else 'io.github.hongguo.personal'
     sdk = Path(os.environ.get('ANDROID_HOME', '/opt/homebrew/share/android-commandlinetools'))
     java = Path(os.environ.get('JAVA_HOME', '/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home'))
@@ -51,9 +59,9 @@ def main():
     if tv:
         shutil.copytree(ROOT/'app/src/main/assets',assets,dirs_exist_ok=True)
         shutil.copytree(ROOT/'app/src/main/res',resources,dirs_exist_ok=True)
-        (resources/'drawable').mkdir(parents=True,exist_ok=True)
         html = (ROOT/'web/index.html').read_text().replace('红果·自用','红果短剧 TV').replace('个人版 1.1',f'TV候选版 {version}').replace('手机实播兼容性待真机验收','电视实播兼容性待真机验收')
         html = html.replace('红果<span class="brand-dot">·</span>自用','红果<span class="brand-dot">·</span>TV')
+        html = html.replace('src="app.js"', 'src="tv-startup.js"')
         (assets/'index.html').write_text(html)
         (assets/'style.css').write_text((assets/'style.css').read_text() + '\n' + (ROOT/'tv.css').read_text())
         xml = (ROOT/'app/src/main/AndroidManifest.xml').read_text()
@@ -61,6 +69,7 @@ def main():
         xml = xml.replace('<application ', '<uses-feature android:name="android.software.leanback" android:required="true" /><uses-feature android:name="android.hardware.touchscreen" android:required="false" /><application android:banner="@drawable/tv_banner" ')
         xml = xml.replace('android:label="红果·自用"','android:label="红果短剧 TV"').replace('android:name=".MainActivity"','android:name="io.github.hongguo.personal.MainActivity" android:screenOrientation="landscape"')
         xml = xml.replace('android.intent.category.LAUNCHER','android.intent.category.LEANBACK_LAUNCHER')
+        xml = xml.replace('<application ', '<queries><intent><action android:name="android.intent.action.VIEW" /><data android:mimeType="video/mp4" /></intent></queries><application ')
         manifest.write_text(xml)
         (resources/'drawable/tv_banner.xml').write_text('<layer-list xmlns:android="http://schemas.android.com/apk/res/android"><item android:width="320dp" android:height="180dp"><shape><solid android:color="#171b25" /></shape></item><item android:width="120dp" android:height="120dp" android:gravity="center" android:drawable="@drawable/icon" /></layer-list>')
     run(['node',ROOT/'bundle.cjs',*(['--tv'] if tv else [])],env)
@@ -102,7 +111,7 @@ def main():
     checksum = hashlib.sha256(output.read_bytes()).hexdigest()
     if tv and ("leanback-launchable-activity:" not in package or "uses-feature-not-required: name='android.hardware.touchscreen'" not in package):
         raise SystemExit('TV入口或无触屏声明缺失')
-    (BUILD/'verification.json').write_text(json.dumps({'file':output.name,'sha256':checksum,'bytes':output.stat().st_size,'package':package_name,'version':version,'minSdk':29,'targetSdk':34,'signature_verified':True,'device_tested':False,'source_version':desktop_version,'candidate':tv},ensure_ascii=False,indent=2)+'\n')
+    (BUILD/'verification.json').write_text(json.dumps({'file':output.name,'sha256':checksum,'bytes':output.stat().st_size,'package':package_name,'version':version,'minSdk':29,'targetSdk':34,'signature_verified':True,'device_tested':False,'source_version':desktop_version,'candidate':tv,**({'tv_version':tv_version,'version_code':version_code} if tv else {})},ensure_ascii=False,indent=2)+'\n')
     (BUILD/'signature.txt').write_text(signature)
     print(f'APK构建与签名校验通过：{output.name} ({output.stat().st_size} bytes)')
     print(f'SHA256 {checksum}')

@@ -3,6 +3,10 @@ const path = require('node:path');
 const esbuild = require('../node_modules/esbuild');
 const root = __dirname;
 const tv = process.argv.includes('--tv');
+if (tv) {
+  fs.mkdirSync(path.join(root, 'build/tv/assets'), {recursive:true});
+  fs.copyFileSync(path.join(root, 'web/tv-startup.js'), path.join(root, 'build/tv/assets/tv-startup.js'));
+}
 const desktop = fs.readFileSync(path.join(root, '../src/native/hongguo.js'), 'utf8');
 const start = desktop.indexOf('function aes128EcbEncrypt(');
 const end = desktop.indexOf('function decryptMp4File(', start);
@@ -32,9 +36,12 @@ const out = path.join(root, 'build'); fs.mkdirSync(out, {recursive:true});
 const generated = path.join(out, 'decrypt.js');
 fs.writeFileSync(generated, `import * as crypto from '../web/crypto.js';\n${decrypt}\nexport { decryptMp4Buffer, decryptSample };\n`);
 esbuild.buildSync({
-  entryPoints: [path.join(root, tv ? 'web/tv.js' : 'web/app.js')], outfile: path.join(root,tv ? 'build/tv/assets/app.js' : 'app/src/main/assets/app.js'),
+  ...(tv ? { stdin: { contents: "import './web/tv.js'; import { connectTvDanmaku } from './web/tv-danmaku.js'; connectTvDanmaku();", resolveDir: root, sourcefile: 'tv-entry.js' } }
+    : { entryPoints: [path.join(root, 'web/app.js')] }),
+  outfile: path.join(root,tv ? 'build/tv/assets/app.js' : 'app/src/main/assets/app.js'),
   bundle: true, format:'iife', platform:'browser', target:'chrome100', minify:true,
   inject:[path.join(root,'web/globals.js')],
-  alias: {'node:crypto':path.join(root,'web/crypto.js'), 'node:zlib':path.join(root,'web/zlib.js'), 'axios':path.join(root,'web/axios.cjs')},
+  alias: {'android-decrypt':path.join(root,'build/decrypt.js'), 'node:crypto':path.join(root,'web/crypto.js'), 'node:zlib':path.join(root,'web/zlib.js'), 'axios':path.join(root,'web/axios.cjs'),
+    ...(tv ? {'node:fs':path.join(root,'mobile/fs.cjs'), 'node:path':path.join(root,'mobile/path.cjs')} : {})},
   legalComments:'eof',
 });
