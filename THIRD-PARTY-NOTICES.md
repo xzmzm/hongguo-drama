@@ -1,6 +1,7 @@
+<!-- 7.0 release target. -->
 # 第三方组件许可说明
 
-适用源码版本：红果短剧 6.5；以下第三方组件保留各自的版本、作者与许可，本轮未升级依赖。实际发行状态见 `docs/release-6.5.md`。
+适用源码版本：红果短剧 6.9（发行目标）；以下第三方组件保留各自的版本、作者与许可，本轮未升级依赖。实际发行状态见 `docs/release-6.9.md`。
 
 本软件（红果短剧下载器）使用了以下第三方组件。各组件的版权归其各自作者所有，
 本软件对这些组件的使用均遵循其原始许可证。
@@ -73,6 +74,8 @@ x264 是唯一非系统静态依赖（GPLv2-or-later），整体构建为 GPLv3-
 完整来源与修改说明见 `src/native/licenses/NOTICE.txt`，许可见同目录 `LICENSE.drpys.txt`。
 
 4.0 播放恢复参考 tsukiyo-zero/hongguoTV 的 `388931852ddc614db8b00775a3dc54c5ede6307f`（GPL-3.0-only）。匿名设备注册的 ttEncrypt 和协议字段由该项目 `DeviceRegister.kt` 改编，其原始出处为 charlie901208/HGTV。身份仅存进程内存，不保留设备令牌、账号或 Cookie；当前直接播放模型的适配参考同一提交。详细来源同上。
+
+6.9 的播放签名 `playback-signature.js` 改编自 N3urda/hongguoTV `7444bb01aec7b0420740103e551c45f1f66101c9` 的 `Argus.kt`（GPL-3.0-only）；其原始归属为 ch6vip/fqapp 的 `rust/src/sign/{argus,simon,ladon,protobuf}.rs`。黄金向量来自同一固定提交的 `PlayerSignTest.kt`。仅播放模型使用真实551 Argus及Ladon，按最终query、实际正文与时间签名；搜索、目录、账号签名和匿名注册协议保留。未移植上游设备持久化、轮换、更大重试预算或权益修改逻辑。详细来源与改动见上述 NOTICE。
 
 3.6 的 App 目录复用项目已有签名实现。目录参数、返回结构与官方图片对象的 JPEG 变体参考 [aston314/hongguo-tv 公开实现](https://github.com/aston314/hongguo-tv/tree/d6a75e3d8e014d50904e24813cb23cff9aa9044c)；不使用其中的固定设备或账号身份。目录接口可访问不代表剧集获准再分发，发行包不包含测试剧集媒体。
 

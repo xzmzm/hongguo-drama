@@ -8,7 +8,7 @@ const mediaUrl = name => `https://v3-reading.qznovelvod.com/${name}.mp4`;
 const stream = (name, width, height, codec_type = 'h264') => ({ main_url: mediaUrl(name), width, height, codec_type, definition: '1080p' });
 function load(name, dependencies) {
   dependencies = { './playback-device': { registerPlaybackDevice: async () => playbackDevice }, ...dependencies };
-  const context = { Buffer, URL, URLSearchParams, AbortSignal, process: { env: {} }, module: { exports: {} },
+  const context = { Buffer, URL, URLSearchParams, AbortSignal, AbortController, process: { env: {} }, module: { exports: {} },
     require: name => Object.hasOwn(dependencies, name) ? dependencies[name] : require(name.startsWith('.') ? path.join(nativeDir, name) : name) };
   vm.runInNewContext(fs.readFileSync(path.join(nativeDir, name), 'utf8'), context);
   return context.module.exports;
@@ -17,7 +17,7 @@ function appFixture(videoList, model = {}) {
   const calls = [];
   const app = load('app-source.js', { axios: async config => {
     calls.push(config);
-    return { status: 200, headers: {}, data: JSON.stringify(config.method === 'POST'
+    return { status: 200, headers: {}, data: JSON.stringify(new URL(config.url).pathname.endsWith('/multi_video_model/v1/')
       ? { data: { '11': { video_model: { fallback_api: 'https://vod.snssdk.com/info' } } } }
       : { video_info: { data: { ...model, video_list: videoList } } }) };
   } });
