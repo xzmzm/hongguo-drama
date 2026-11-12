@@ -39,10 +39,18 @@ an empty legacy POST, preserves exact episode matching and accepts both array
 and object rendition lists. No account cookies, tokens or persistent identity
 are added. Validation and scope are recorded in docs/issue-130-video-tab.md.
 
-Playback ArgusBean551 / Ladon signatures in player-signature.js are ported from
-tsukiyo-zero/hongguoTV core/Argus.kt, commit
-269c6d8877d19be7f52d3c43eb12444477df95b8 (GPL-3.0-only), derived from ch6vip/fqapp:
-https://github.com/tsukiyo-zero/hongguoTV/pull/104
-https://github.com/ch6vip/fqapp
-Changes: Node.js crypto / existing SM3 implementation; playback-only request
-binding to the final encoded query, actual compressed body and shared timestamp.
+Playback-only 551 x-argus and x-ladon signing (6.9)
+Adapted from N3urda/hongguoTV, commit
+7444bb01aec7b0420740103e551c45f1f66101c9 (GPL-3.0-only),
+kotlin-tv/core/src/main/kotlin/com/hongguotv/core/Argus.kt,
+blob 9f1b06f16c778f07d1bd9e1f8e9a596590e57213.
+That implementation attributes ch6vip/fqapp (GPL-3.0-only),
+rust/src/sign/argus.rs, simon.rs, ladon.rs and protobuf.rs.
+Independent fixed vectors come from the same commit's PlayerSignTest.kt,
+blob 89f48bb174f558988807ee3ceab2a6011cfff229.
+Changes: native JavaScript/BigInt and Node crypto, existing pure-JS SM3;
+ordered uint32 protobuf, 72-round Simon, 551 framing/AES-CBC and Ladon ARX.
+Only playback model headers use this family, bound to final query/raw body/time.
+No upstream device persistence/rotation, enlarged retry budget, privilege changes,
+account cookies or registration changes are imported. Other signing paths remain
+on their existing algorithms. Protocol constants are not user credentials.

@@ -1,5 +1,13 @@
 # 同步发行规则
 
+7.1已于2026-11-12 14:10:02（Asia/Shanghai）正式公开并设Latest，内部7.1.0、桌面构建7.1.2，冻结源码`bdab9d6158e07524f234f88c1168f20baa2cd507`。双Mac、Windows x64、Linux x64 AppImage、Docker amd64五类共25份正式附件，远端大小／SHA256、三份清单及匿名下载入口已核对；119个临时分段已清理。双Mac新签名、公证、装订；Windows EXE未签名，Intel仅Rosetta，NVIDIA实体未验。高性能模式功能通过，M5本轮样本未提速且文件更大。未替换本机正式安装；TV与手机独立。完整回执见[7.1说明](release-7.1.md)。
+
+7.1高性能模式须用本轮新媒体包验收当前真实输入探测、明确CPU回退及取消／输入／存储保护，不能沿用旧候选的三条已取消CI。双Mac Librempeg按新脚本重建；Windows／Linux的FFmpeg和Librempeg须启用NVENC，并在原9份对应源码归档中包含固定nv-codec-headers源码、准备脚本和完整MIT许可，不增加独立发行附件。实体NVIDIA未实跑时如实标明，不外推普通CI的CPU回退结果。
+
+7.0已于2026-11-11 21:41:46（Asia/Shanghai）正式公开并设Latest，内部7.0.0、桌面构建7.0.1，冻结源码`3f5927d0d605ff7742fde8cbd1bb92ffe951b080`。双Mac、Windows x64、Linux x64 AppImage、Docker amd64五类共25份正式附件；双Mac已签名、公证、装订，Windows EXE未签名且App真实下载队列未测，Intel仅Rosetta。未运行通用全量测试，未替换本机正式安装；TV与手机独立。完整回执见[7.0记录](release-7.0.md)。
+
+6.9已于2026-11-11 19:04:15（Asia/Shanghai）正式公开并设Latest，内部6.9.0、桌面构建6.9.4，冻结源码`b364419c2b81da3a7e28fd637011aaff9b8acf2c`。双Mac、Windows x64、Linux x64 AppImage、Docker amd64五类共25份正式附件，远端大小／SHA256、两份更新清单及总校验清单已回读核对；119个本轮临时分段已全部清理，10个匿名下载入口及完整总清单核对通过。双Mac已签名、公证、装订；Windows EXE未签名、App真实下载队列未测，Intel仅Rosetta；保留两项基线断言失败。未替换本机正式安装，TV与手机独立。 详见[6.9记录](release-6.9.md)。
+
 6.8已于2026-11-11 10:17:07（Asia/Shanghai）正式公开并设Latest，内部6.8.0、桌面构建6.8.2，冻结源码`e06828f0c81392fb572a5feda6cec54dba643251`。双Mac、Windows x64、Linux x64 AppImage、Docker amd64统一共25附件，远端大小／SHA256与更新及总校验清单已回读核对。双Mac本轮新签名、公证、装订；Windows EXE未签名，Intel仅Rosetta。未替换本机正式安装。 详见[6.8记录](release-6.8.md)。
 
 6.7已于2026-11-11 00:03:04（Asia/Shanghai）正式公开并设Latest，内部6.7.0、桌面构建6.7.1，冻结源码`43c7b4c8fa98df3b1b7902713788641f9d325e2b`。双Mac、Windows x64、Linux x64 AppImage、Docker amd64五类共25附件，远端大小与SHA256及更新清单已核对。双Mac签名、公证、装订；Windows两集各10秒静音实播及安装/重装/升级资料保留、Linux两集CPU静音播放、Docker两集1080P下载合并/认证/重启持久化通过。Windows EXE未签名，Intel Mac仅Rosetta；未替换本机正式安装，TV和手机不随本次发行。 详见[6.7记录](release-6.7.md)。
@@ -75,7 +83,7 @@
 上一正式版为 **3.9**（内部 `3.9.0`，标签 `v3.9`）。三端 16 项附件已发布；Mac 已签名、公证和装订，Windows CI 已通过。详细变化、回执及验证边界见 [3.9 说明](release-3.9.md)。
 
 从 1.1.9 起，一轮更新共用一个版本：Mac Apple Silicon arm64、Mac Intel x64、Windows x64。不得按平台独立跳号。本机未公开测试版不另算发行。
-当前规则（自 2.0 起）：所有面向用户的版本、GitHub 标签、发行标题及下载文件名只使用两段版本，例如 `2.0`、`2.1`，不发布第三段补丁版本。版本按整数段比较，不按小数或字符串排序；按“逢 9 进 1”，3.9 的下一版为 4.0，再下一版为 4.1，之后为 4.2。electron-builder 和更新器要求 SemVer，因此仅机器读取的包配置和更新清单保留末尾 `.0`（本分支 `6.4.0`）；这是同一版本的内部格式，不是另一个公开版本。平台构建号独立递增。版本比较及公开命名回归：`node scripts/check-release-version.cjs`，包含 3.9 → 4.0 → 4.1 → 4.2、5.8 → 5.9 → 6.0 与公开／内部相等版本场景。
+当前规则（自 2.0 起）：所有面向用户的版本、GitHub 标签、发行标题及下载文件名只使用两段版本，例如 `2.0`、`2.1`，不发布第三段补丁版本。版本按整数段比较，不按小数或字符串排序；按“逢 9 进 1”，3.9 的下一版为 4.0，再下一版为 4.1，之后为 4.2。electron-builder 和更新器要求 SemVer，因此仅机器读取的包配置和更新清单保留末尾 `.0`（本分支 `7.1.0`）；这是同一版本的内部格式，不是另一个公开版本。平台构建号独立递增。版本比较及公开命名回归：`node scripts/check-release-version.cjs`，包含 3.9 → 4.0 → 4.1 → 4.2、5.8 → 5.9 → 6.0 与公开／内部相等版本场景。
 
 历史版本曾使用每次增加 0.1 及下列指定例外；后续以以上整数段顺序为准。
 

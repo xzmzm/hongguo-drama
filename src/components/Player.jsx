@@ -29,7 +29,10 @@ const playbackQualities = (quality, seriesId) => quality === 'auto' && !/^(xifan
 const rejectsPlaybackSource = result => /^(?:DEVICE_REGISTRATION_FAILED|BUSINESS_REJECTED|SECURITY_BLOCKED)$/.test(result?.code || '')
   || Array.isArray(result?.sources) && result.sources.some(item => item.source === 'app'
     && /^(?:DEVICE_REGISTRATION_FAILED|HTTP_(?:403|429)|BUSINESS_REJECTED|SECURITY_BLOCKED)$/.test(item.code));
-const stopsQualityFallback = result => result?.cancelled === true || result?.code === 'ERR_CANCELED' || rejectsPlaybackSource(result);
+// Every quality asks for the same complete model; a different tier cannot repair an empty response.
+const stopsQualityFallback = result => result?.cancelled === true || result?.code === 'ERR_CANCELED' || rejectsPlaybackSource(result)
+  || result?.code === 'EMPTY_RESPONSE' || Array.isArray(result?.sources)
+    && result.sources.some(item => item.source === 'app' && item.code === 'EMPTY_RESPONSE');
 const PLAYBACK_PREFERENCES_KEY = 'hongguo:playback-preferences';
 const readPlaybackPreferences = () => {
   let saved;
@@ -60,6 +63,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
   useEffect(() => subscribeShortcuts(setShortcuts), []);
   const [playbackSettingSaving, setPlaybackSettingSaving] = useState(false);
   const playbackSettingPending = useRef(false);
+  const playbackSettingRevision = useRef(0);
   const [windowFill, setWindowFill] = useState(false);
   useEffect(() => { setWindowFill(false); }, [portrait, active]);
   const [seriesList, setSeriesList] = useState([]);
@@ -131,6 +135,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
   const [softwareDecode, setSoftwareDecode] = useState(() => {
     try { return window.localStorage.getItem('hongguo:software-decode') === 'true'; } catch { return false; }
   });
+  const [fastConversion, setFastConversion] = useState(false);
   const VideoElement = softwareDecode ? SoftwareVideo : 'video';
   const [compatMap, setCompatMap] = useState({});         // vidIndex -> 转码后 url
   const [compatProgress, setCompatProgress] = useState(null); // {vidIndex, percent}
@@ -182,6 +187,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
   const selectedSeriesRef = useRef('');
   const selectionVersion = useRef(0);
   const onlineRequestRef = useRef(null);
+  const onlineQualityRef = useRef(null);
   const prefetchRef = useRef([]);
   const prefetchFailureRef = useRef(new Map());
   // Keep explicit rejection latched through automatic reconnects; navigation and manual retry may clear it.
@@ -304,6 +310,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
     clearTimeout(decodeTimer.current);
     cancelCompat();
     releaseOnline();
+    onlineQualityRef.current = null;
     if (preservePrefetch === false) releasePrefetch();
     setOnlineVid(null);
     setOnlineUrl('');
@@ -550,6 +557,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
+    const decoderRevision = playbackSettingPending.current ? null : playbackSettingRevision.current;
     setQualityLoading(true);
     window.electronAPI.getSettings().then((settings) => {
       if (!cancelled) {
@@ -558,6 +566,11 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
         setAutoDelete(settings?.auto_delete_watched === true);
         setCacheNext(settings?.cache_next_episode !== false);
         setAutoCompat(settings?.compat_mode !== false);
+        if (decoderRevision === playbackSettingRevision.current) {
+          const fast = !mobile && settings?.fast_conversion === true;
+          setFastConversion(fast);
+          if (fast) changeSoftwareDecode(false);
+        }
       }
     }).catch(() => {
       if (!cancelled) showToast('默认下载清晰度读取失败，请确认清晰度后再下载');
@@ -573,7 +586,12 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
     if (!window.electronAPI.onTranscodeProgress) return undefined;
     return window.electronAPI.onTranscodeProgress((d) => {
       const request = compatRequestRef.current;
-      if (!request || d.requestId !== request.requestId || request.version !== mediaVersion.current || String(d.seriesId) !== request.seriesId || d.vidIndex !== request.vidIndex || d.done) return;
+      if (!request || d.requestId !== request.requestId || request.version !== mediaVersion.current || String(d.seriesId) !== request.seriesId || d.vidIndex !== request.vidIndex) return;
+      if (typeof d.notice === 'string' && d.notice && d.notice !== request.lastNotice) {
+        request.lastNotice = d.notice;
+        showToast(d.notice);
+      }
+      if (d.done) return;
       setCompatProgress({ vidIndex: d.vidIndex, percent: d.percent || 0 });
     });
   }, []);
@@ -581,6 +599,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
   const savePlaybackSetting = async (key, value, setValue) => {
     if (playbackSettingPending.current) return;
     playbackSettingPending.current = true;
+    playbackSettingRevision.current++;
     setPlaybackSettingSaving(true);
     try {
       const result = await window.electronAPI.saveSettings({ [key]: value });
@@ -592,6 +611,35 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
       playbackSettingPending.current = false;
       setPlaybackSettingSaving(false);
     }
+  };
+
+  const changeSoftwareDecode = next => {
+    if (next === softwareDecode) return;
+    if (videoRef.current) {
+      volumeRef.current = videoRef.current.volume; mutedRef.current = videoRef.current.muted;
+      savePlaybackPreferences();
+    }
+    pendingSeekRef.current = currentPosition();
+    if (loadedMediaRef.current) pendingAutoplayRef.current = !loadedMediaRef.current.element.paused;
+    persistPosition(true); holdVideoFrame(); videoRef.current?.pause(); loadedMediaRef.current = null;
+    setSoftwareDecode(next);
+    if (current?.status === 'completed' && (playbackError || decodeFailed || !usableLocal(current, String(activeSeriesId)))) {
+      void retryPlayback(pendingAutoplayRef.current);
+    }
+  };
+
+  const changeDecoder = mode => {
+    if (qualityLoading || playbackSettingPending.current || !['auto', 'software', 'hardware'].includes(mode) || mobile && mode === 'hardware') return;
+    const software = mode === 'software', fast = mode === 'hardware';
+    if (software === softwareDecode && fast === fastConversion) return;
+    const apply = saved => {
+      changeSoftwareDecode(software);
+      setFastConversion(saved);
+      try { window.localStorage.setItem('hongguo:software-decode', String(software)); }
+      catch { showToast('解码方式已切换，但未能保存'); }
+    };
+    if (mobile) return apply(false);
+    return savePlaybackSetting('fast_conversion', fast, apply);
   };
 
   // 打开剧集面板或删除文件后，补全各剧的下载进度。
@@ -617,6 +665,10 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
     return window.electronAPI.onOnlinePlayProgress((d) => {
       const request = onlineRequestRef.current;
       if (!request || d.requestId !== request.requestId) return;
+      if (typeof d.notice === 'string' && d.notice && d.notice !== request.lastNotice) {
+        request.lastNotice = d.notice;
+        showToast(d.notice);
+      }
       if (d.code === 'MEDIA_TOO_LARGE') { showToast(d.error); return; }
       if (request.prepared) return;
       setOnlineProgress({
@@ -790,7 +842,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
       const ep = episodes.find((e) => e.vid_index === vidIndex);
       if (!ep || ep.locked) return;
       const request = { requestId: crypto.randomUUID(), seriesId: String(activeSeriesId), vidIndex,
-        quality: onlineRequestRef.current?.playbackQuality || (onlineQuality === 'compat' ? 'auto' : onlineQuality), version: mediaVersion.current };
+        quality: onlineQualityRef.current?.playbackQuality || (onlineQuality === 'compat' ? 'auto' : onlineQuality), version: mediaVersion.current };
       if (compatRequestRef.current?.version === request.version && compatRequestRef.current?.vidIndex === vidIndex) return;
       autoCompatAttemptRef.current = { version: request.version, force };
       pendingSeekRef.current = currentPosition();
@@ -993,6 +1045,8 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
         request.streamId = res.streamId;
         request.codec = res.codec;
         request.prepared = true;
+        // Compatibility playback releases the stream, but still owns its quality recovery step.
+        onlineQualityRef.current = request;
         if (!usedPrefetch && !res.cached) setMediaBuffering(true);
         setOnlineUrl(res.url);
         setOnlineProgress(null);
@@ -1010,7 +1064,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
     const key = `${activeSeriesId}:${currentIndex}`;
     if (stateRef.current.onlineQuality === 'auto' && !/^(xifan|hema|reelshort|dramabox|custom):/.test(activeSeriesId)
       && onlineSourceRef.current === key) {
-      const next = (onlineRequestRef.current?.qualityIndex ?? 0) + 1;
+      const next = (onlineQualityRef.current?.qualityIndex ?? 0) + 1;
       if (!current?.vid || current.locked || next >= AUTO_ONLINE_QUALITIES.length) return false;
       showToast(`正在自动切换到${AUTO_ONLINE_QUALITIES[next] === 'auto' ? '兼容片源' : AUTO_ONLINE_QUALITIES[next].toUpperCase()}…`);
       startOnlinePlay(currentIndex, currentPosition(), true,
@@ -1745,30 +1799,18 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
               <option value="1080p">1080P</option>
             </select>
           </label>
-          <label className="player-download-quality">
+          <label className="player-download-quality player-decoder-control">
             <span>{t("解码方式")}</span>
-            <select className="input-field" aria-label={t("解码方式")} value={softwareDecode ? 'software' : 'auto'}
+            <select className="input-field" aria-label={t("解码方式")} value={fastConversion ? 'hardware' : softwareDecode ? 'software' : 'auto'}
+              aria-describedby={!mobile ? 'player-decoder-help' : undefined} disabled={qualityLoading || playbackSettingSaving}
               title={t("软件解码使用CPU直接播放H.264/H.265，无需等待整集转码；流畅度取决于CPU性能。")}
-              onChange={event => {
-                const next = event.target.value === 'software';
-                if (videoRef.current) {
-                  volumeRef.current = videoRef.current.volume; mutedRef.current = videoRef.current.muted;
-                  savePlaybackPreferences();
-                }
-                pendingSeekRef.current = currentPosition();
-                if (loadedMediaRef.current) pendingAutoplayRef.current = !loadedMediaRef.current.element.paused;
-                persistPosition(true); holdVideoFrame(); videoRef.current?.pause(); loadedMediaRef.current = null;
-                setSoftwareDecode(next);
-                if (current?.status === 'completed' && (playbackError || decodeFailed || !usableLocal(current, String(activeSeriesId)))) {
-                  void retryPlayback(pendingAutoplayRef.current);
-                }
-                try { window.localStorage.setItem('hongguo:software-decode', String(next)); }
-                catch { showToast('解码方式已切换，但未能保存'); }
-              }}>
+              onChange={event => changeDecoder(event.target.value)}>
               <option value="auto">{t("自动（系统解码）")}</option>
               <option value="software">{t("软件解码（CPU）")}</option>
+              {!mobile && <option value="hardware">{t("高性能显卡快速解码（老电脑请勿使用）")}</option>}
             </select>
           </label>
+          {!mobile && <p id="player-decoder-help" className="player-download-quality-hint">{t("优先使用显卡加速格式转换，ByteVC2仍由CPU解码；不支持时提示并回退。")}</p>}
       </div>
 
       <div className="player-header" hidden={actionsHidden}>

@@ -8,14 +8,18 @@
 // Crypto tables and SDK protocol constants below are not user credentials.
 const crypto = require('node:crypto');
 const { gzipSync } = require('node:zlib');
+const { setTimeout: delay } = require('node:timers/promises');
 const { registerPlaybackDevice } = require('./playback-device');
+const { signPlayer } = require('./playback-signature');
 const { abortError, throwIfAborted, boundedSignal, networkFailure } = require('./request-signal');
 const sm3 = require('./sm3');
-const { headers: playbackSignatureHeaders } = require('./player-signature');
 const { normalizeDownloadQuality, meetsDownloadQuality } = require('./download-quality');
 const localId = () => String(1000000000000000n + BigInt('0x' + crypto.randomBytes(6).toString('hex')));
 const PROCESS_NONCE = crypto.randomBytes(18).toString('base64url');
 const PROCESS_STARTED = Date.now();
+let playbackQueue = Promise.resolve();
+let playbackReadyAt = 0;
+let playbackRejection = null;
 const VIDEO_API = 'https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/';
 const VIDEO_TAB_API = 'https://api5-normal-sinfonlineb.fqnovel.com/reading/bookapi/video_tab/multi_video_model/v1/';
 const SEARCH_API = 'https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/search/tab/v';
@@ -143,7 +147,7 @@ function helios(khronos) {
 
 function branchOf(url, body, khronos) { const bodyMd5 = body ? crypto.createHash('md5').update(body).digest() : Buffer.alloc(16); const q = sm3(url.split('?')[1]); const iv = getIv(getIv(getIv(0x20230928, q), bodyMd5), le32(khronos)); const low = iv & 15; return low - (((low * 171) >> 9) * 3); }
 function playbackRequest(payload, identity, videoId = '') {
-    // Bind Argus/Ladon to the exact query and compressed bytes sent on the wire.
+    // Sign the final query and actual gzip body; other API families retain their original signer.
     const body = videoId ? null : gzipSync(Buffer.from(payload));
     const requestTicket = Date.now(), khronos = Math.floor(requestTicket / 1000);
     const device = { ...(videoId ? VIDEO_TAB_DEVICE : PLAYBACK_DEVICE), ...identity };
@@ -152,15 +156,17 @@ function playbackRequest(payload, identity, videoId = '') {
         video_platform: '1024', source: '0', from_video_id: '' } : {};
     const query = pythonUrlEncode({ ...device, ...values, ts: String(khronos), _rticket: String(requestTicket) });
     const url = `${videoId ? VIDEO_TAB_API : VIDEO_API}?${query}`;
+    const signature = signPlayer({ query, body, ts: khronos });
     const headers = {
         'User-Agent': VIDEO_UA.replace(DEVICE.version_code, device.version_code), Accept: 'application/json; charset=utf-8,application/x-protobuf',
-        'sdk-version': '2', 'x-xs-from-web': '0',
+        'x-ss-req-ticket': signature['x-ss-req-ticket'], 'sdk-version': '2', 'x-xs-from-web': '0',
         'passport-sdk-version': videoId ? '50561' : '5051452', 'x-ss-dp': String(device.aid),
-        ...playbackSignatureHeaders(query, body, requestTicket), 'x-tt-dt': '',
+        'x-khronos': signature['x-khronos'],
+        'x-ladon': signature['x-ladon'], 'x-argus': signature['x-argus'], 'x-tt-dt': '',
         'x-tt-store-region': 'cn', 'x-tt-store-region-src': 'did',
     };
     if (body) Object.assign(headers, { 'Content-Type': 'application/json; charset=UTF-8',
-        'Content-Encoding': 'gzip' });
+        'Content-Encoding': 'gzip', 'x-ss-stub': signature['x-ss-stub'] });
     else headers['x-tt-request-tag'] = 't=0;n=0';
     return { url, body, headers, method: videoId ? 'GET' : 'POST' };
 }
@@ -352,8 +358,9 @@ async function requestJson(url, options, deadline, signal) {
         }
         throwIfAborted(signal);
         if ([301, 302, 303, 307, 308].includes(response.status)) {
-            // Do not resend a signed body to a redirect destination.
-            if (requestOptions.method === 'POST' || !response.headers.location) throw Object.assign(new Error('App 接口发生不支持的跳转'), { code: 'SECURITY_BLOCKED' });
+            // Signatures/session headers bind the final URL and must not follow a redirect.
+            const bound = Object.keys(requestOptions.headers || {}).some(name => /^(?:x-argus|x-ladon|x-gorgon|x-medusa|cookie|authorization)$/i.test(name));
+            if (requestOptions.method === 'POST' || bound || !response.headers.location) throw Object.assign(new Error('App 接口发生不支持的跳转'), { code: 'SECURITY_BLOCKED' });
             url = checkedUrl(new URL(response.headers.location, url).href, ['fqnovel.com', 'snssdk.com']);
             continue;
         }
@@ -378,6 +385,39 @@ async function fetchAppPlayUrl(vid, options = {}) {
     normalizeDownloadQuality(options.quality); // Validate before registration or network I/O.
     vid = String(vid || '');
     if (!/^\d{1,30}$/.test(vid)) throw new Error('分集编号无效');
+    // Playback, prefetch and downloads share one paced turn, including registration.
+    const previousRejection = playbackRejection;
+    const pending = playbackQueue.then(async () => {
+        throwIfAborted(options.signal);
+        if (playbackRejection !== previousRejection) throw playbackRejection;
+        const wait = playbackReadyAt - Date.now();
+        if (wait > 0) {
+            try { await delay(wait, undefined, { signal: options.signal }); }
+            catch (error) { throwIfAborted(options.signal); throw error; }
+        }
+        throwIfAborted(options.signal);
+        try { return await fetchAppPlayUrlFresh(vid, options); }
+        catch (error) {
+            // An explicit refusal also stops work queued before it was received.
+            if ([403, 429].includes(error.status) || error.code === 'BUSINESS_REJECTED' || error.code === 'DEVICE_REGISTRATION_FAILED'
+                && ['BUSINESS_REJECTED', 'HTTP_403', 'HTTP_429'].includes(error.registrationFailure)) playbackRejection = error;
+            throw error;
+        }
+        finally { playbackReadyAt = Date.now() + 1000; }
+    });
+    playbackQueue = pending.catch(() => {});
+    if (!options.signal) return pending;
+    let cancel;
+    try {
+        return await Promise.race([pending, new Promise((resolve, reject) => {
+            cancel = () => reject(abortError(options.signal));
+            options.signal.addEventListener('abort', cancel, { once: true });
+            if (options.signal.aborted) cancel();
+        })]);
+    } finally { options.signal.removeEventListener('abort', cancel); }
+}
+
+async function fetchAppPlayUrlFresh(vid, options) {
     const payload = JSON.stringify({
         biz_param: { detail_page_version: 0, device_level: 3, disable_digg_stat: false, need_all_video_definition: true, need_mp4_align: false, use_os_player: false, use_server_dns: false, video_platform: 1024 },
         mixed_video_id_map: { '1004': [vid] },
@@ -393,9 +433,8 @@ async function fetchAppPlayUrl(vid, options = {}) {
         let response;
         for (let attempt = 0; attempt < 2; attempt++) {
             throwIfAborted(signal);
-            // Repeating the legacy route on another host cannot recover its persistent
-            // empty 200. Spend the existing single recovery attempt on the current API.
-            const signed = playbackRequest(payload, identity, attempt ? vid : '');
+            // Prefer the current API; only an empty response enables one legacy attempt.
+            const signed = playbackRequest(payload, identity, attempt ? '' : vid);
             if (attempt) signed.headers.Connection = 'close';
             try {
                 response = await requestJson(signed.url, { method: signed.method, headers: signed.headers, data: signed.body }, deadline, signal);
@@ -405,18 +444,21 @@ async function fetchAppPlayUrl(vid, options = {}) {
                 throwIfAborted(signal);
                 if (error.code === 'ERR_CANCELED') throw error;
                 if (attempt || error.code !== 'EMPTY_RESPONSE' || deadline - Date.now() < 1000) throw error;
-                // Keep the video_tab attempt even when a fresh registration fails.
+                // Keep the legacy attempt even when a fresh registration fails.
                 if (deadline - Date.now() >= 8000) {
                     try { identity = await registerPlaybackDevice(requestJson, { signal }); }
                     catch (registrationError) {
                         throwIfAborted(signal);
                         if (registrationError.code === 'ERR_CANCELED') throw registrationError;
-                        // Keep the previous identity for a non-cancellation registration failure.
+                        if (registrationError.code === 'DEVICE_REGISTRATION_FAILED'
+                            && ['BUSINESS_REJECTED', 'HTTP_403', 'HTTP_429'].includes(registrationError.registrationFailure)) throw registrationError;
+                        // Keep the previous identity for other registration failures.
                     }
                 }
                 throwIfAborted(signal);
-                if (deadline - Date.now() < 500) throw error;
-                await new Promise(resolve => setTimeout(resolve, 300));
+                if (deadline - Date.now() < 1500) throw error;
+                try { await delay(1000, undefined, { signal }); }
+                catch (waitError) { throwIfAborted(signal); throw waitError; }
                 throwIfAborted(signal);
             }
         }

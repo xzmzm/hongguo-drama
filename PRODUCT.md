@@ -1,5 +1,10 @@
-<!-- 6.8 release target. -->
+<!-- 7.1 published release; frozen application source remains unchanged. -->
+<!-- Earlier published release records are retained below. -->
 # 红果短剧
+
+7.1已于2026-11-12 14:10:02（Asia/Shanghai）正式公开并设Latest，内部7.1.0、桌面构建7.1.2，冻结源码`bdab9d6158e07524f234f88c1168f20baa2cd507`。双Mac、Windows x64、Linux x64 AppImage、Docker amd64五类共25份正式附件，远端大小／SHA256、三份清单及匿名下载入口已核对；119个临时分段已清理。双Mac新签名、公证、装订；Windows EXE未签名，Intel仅Rosetta，NVIDIA实体未验。高性能模式功能通过，M5本轮样本未提速且文件更大。未替换本机正式安装；TV与手机独立。完整回执见[7.1说明](docs/release-7.1.md)。
+
+7.0已于2026-11-11 21:41:46（Asia/Shanghai）正式公开并设Latest，内部7.0.0、桌面构建7.0.1，冻结源码`3f5927d0d605ff7742fde8cbd1bb92ffe951b080`。双Mac、Windows x64、Linux x64 AppImage、Docker amd64五类共25份正式附件；双Mac已签名、公证、装订，Windows EXE未签名且App真实下载队列未测，Intel仅Rosetta。未运行通用全量测试，未替换本机正式安装；TV与手机独立。见[7.0正式回执](docs/release-7.0.md)。
 
 6.8已于2026-11-11 10:17:07（Asia/Shanghai）正式公开并设Latest，内部6.8.0、桌面构建6.8.2，冻结源码`e06828f0c81392fb572a5feda6cec54dba643251`。双Mac、Windows x64、Linux x64 AppImage、Docker amd64统一共25附件，远端大小／SHA256与更新及总校验清单已回读核对。双Mac本轮新签名、公证、装订；Windows EXE未签名，Intel仅Rosetta。未替换本机正式安装。 验证范围见[6.8说明](docs/release-6.8.md)。
 
@@ -28,7 +33,7 @@
 
 5.4 已正式发布：恢复播放请求签名，增加官网登录、按剧缓存清理、观看记录分组与 DLNA 单集投屏。发行与验证状态见 [5.4说明](docs/release-5.4.md)。
 
-当前正式版：**6.8**；上一正式版：**6.7**（以下保留历史发行记录）。
+当前正式版：**7.1**；上一正式版：**7.0**（以下保留历史发行记录）。
 
 5.4（内部 `5.4.0`）已于 2026-11-02 18:25（Asia/Shanghai）正式发布，标签 `v5.4`，冻结源码 `e7595c040d328655212a2fb0b315286a6ee914b2`。恢复播放请求签名，增加官网登录、按剧清缓存、观看记录分组与 DLNA 单集投屏。三端16附件远端大小及SHA256匹配；双Mac App与DMG四份Apple公证Accepted、签名/装订、只读挂载与更新ZIP恢复通过。源码CI41425248571、Windows CI41425313110通过232单元及102平台检查；Windows便携11项、安装/重装/真实1.80升级资料保留9项通过，EXE未签名。最终arm64包随机真实两集1080P HEVC/AAC下载和静音约10秒播放通过；x64 Rosetta启动退出通过。
 

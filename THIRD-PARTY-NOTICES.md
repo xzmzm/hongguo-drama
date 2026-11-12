@@ -1,7 +1,9 @@
-<!-- 6.8 release target. -->
+<!-- 7.1 release target. -->
 # 第三方组件许可说明
 
-适用源码版本：红果短剧 6.8（发行目标）；以下第三方组件保留各自的版本、作者与许可，本轮未升级依赖。实际发行状态见 `docs/release-6.8.md`。
+适用源码版本：红果短剧 7.1（发行候选，尚未公开）；本轮 follow-redirects 升至1.16.3，Windows／Linux媒体构建增加固定nv-codec-headers 12.1.14.0；其余第三方组件保留各自的版本、作者与许可。实际发行状态见 `docs/release-7.1.md`。
+
+7.1采纳anupam-orbis在PR #140提供的实际依赖锁更新：follow-redirects从1.16.1升至1.16.3；本项目另补重定向安全回归。当前正式版为7.0，完整协作记录见 `CONTRIBUTORS.md`。
 
 本软件（红果短剧下载器）使用了以下第三方组件。各组件的版权归其各自作者所有，
 本软件对这些组件的使用均遵循其原始许可证。
@@ -14,12 +16,15 @@
 
 6.3开发候选在macOS arm64启用系统VideoToolbox H.264编码，保留x264回退；`scripts/librempeg-videotoolbox-prototype.patch`补齐固定上游版本缺失的内部函数声明，对应源码包同时包含该补丁及完整构建脚本。
 
+7.1高性能转换候选使双Mac Librempeg均支持VideoToolbox H.264编码，Windows／Linux的FFmpeg和Librempeg支持NVIDIA NVENC H.264编码；ByteVC2解码仍在CPU，不能据此宣称GPU硬解或实体NVIDIA已验收。详见`build/ffmpeg/LIBREMPEG-NOTICE.txt`。
+
 | 组件 | 版本 | 许可证 | 项目地址 |
 |---|---|---|---|
 | Electron | 44.9.1 | MIT | https://github.com/electron/electron |
 | React | 18.3.1 | MIT | https://github.com/facebook/react |
 | React DOM | 18.3.1 | MIT | https://github.com/facebook/react |
 | axios | 1.20.0 | MIT | https://github.com/axios/axios |
+| follow-redirects（axios依赖） | 1.16.3 | MIT | https://github.com/follow-redirects/follow-redirects |
 | electron-updater | 6.8.9 | MIT | https://github.com/electron-userland/electron-builder |
 
 Electron 打包产物中已包含 Chromium 与 Node.js 的许可声明：
@@ -37,7 +42,16 @@ Windows x64 内置从固定源码编译的 FFmpeg 9.0.2 与 x264 b35605ace3ddf7c
 x264 为唯一外部编解码静态库（GPLv2-or-later）；整体构建为 GPLv3-or-later。构建验证 x64 架构与系统 DLL 依赖。
 完整 FFmpeg/x264 对应源码、准确构建脚本、配置日志、工具链版本和二进制哈希随 Release 的 Windows 对应源码包提供。
 许可全文与来源说明见 `COPYING.GPLv3`、`COPYING.GPLv2`、`LICENSE.md`、`WINDOWS-X264-LICENSE.txt` 和 `WINDOWS-NOTICE.txt`。
-该精简构建提供软件 H.264 编码，不包含旧版 Gyan essentials 包及其额外库。
+该精简构建提供软件H.264及可选NVIDIA NVENC H.264编码，不包含旧版Gyan essentials包及其额外库。
+
+---
+
+### NVIDIA codec headers（MIT，仅Windows／Linux媒体构建）
+
+- 官方来源：https://github.com/FFmpeg/nv-codec-headers ，版本12.1.14.0，固定提交`1889e62e2d35ff7aa9baca2bceb14f053785e6f1`。
+- 源码归档SHA256：`e30d4791fd386de8b5c9f88dec781e546ec148b8808440dd421da5f26c2700ae`；下载和完整性校验见`scripts/prepare-nv-codec-headers.sh`。
+- 头文件的每份完整版权与MIT许可保留于随包的`NV-CODEC-HEADERS-LICENSE.txt`；Windows／Linux的FFmpeg和Librempeg对应源码同时包含该许可、固定头文件源码归档及准备脚本。
+- 只使用编码接口头文件，不捆绑NVIDIA驱动或运行库；运行时动态加载用户已有驱动。实际可用性须对当前输入试编码出帧，不能以编译含NVENC代替实体GPU验收。
 
 ---
 
@@ -74,6 +88,8 @@ x264 是唯一非系统静态依赖（GPLv2-or-later），整体构建为 GPLv3-
 完整来源与修改说明见 `src/native/licenses/NOTICE.txt`，许可见同目录 `LICENSE.drpys.txt`。
 
 4.0 播放恢复参考 tsukiyo-zero/hongguoTV 的 `388931852ddc614db8b00775a3dc54c5ede6307f`（GPL-3.0-only）。匿名设备注册的 ttEncrypt 和协议字段由该项目 `DeviceRegister.kt` 改编，其原始出处为 charlie901208/HGTV。身份仅存进程内存，不保留设备令牌、账号或 Cookie；当前直接播放模型的适配参考同一提交。详细来源同上。
+
+6.9 的播放签名 `playback-signature.js` 改编自 N3urda/hongguoTV `7444bb01aec7b0420740103e551c45f1f66101c9` 的 `Argus.kt`（GPL-3.0-only）；其原始归属为 ch6vip/fqapp 的 `rust/src/sign/{argus,simon,ladon,protobuf}.rs`。黄金向量来自同一固定提交的 `PlayerSignTest.kt`。仅播放模型使用真实551 Argus及Ladon，按最终query、实际正文与时间签名；搜索、目录、账号签名和匿名注册协议保留。未移植上游设备持久化、轮换、更大重试预算或权益修改逻辑。详细来源与改动见上述 NOTICE。
 
 3.6 的 App 目录复用项目已有签名实现。目录参数、返回结构与官方图片对象的 JPEG 变体参考 [aston314/hongguo-tv 公开实现](https://github.com/aston314/hongguo-tv/tree/d6a75e3d8e014d50904e24813cb23cff9aa9044c)；不使用其中的固定设备或账号身份。目录接口可访问不代表剧集获准再分发，发行包不包含测试剧集媒体。
 
@@ -214,10 +230,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-## 播放请求 ArgusBean551 / Ladon 签名（GPL-3.0-only）
-
-`src/native/player-signature.js` 移植自 [tsukiyo-zero/hongguoTV](https://github.com/tsukiyo-zero/hongguoTV)
-提交 `269c6d8877d19be7f52d3c43eb12444477df95b8` 的 `core/Argus.kt`（PR #104），原始算法来源为
-[ch6vip/fqapp](https://github.com/ch6vip/fqapp)。沿用 GPL-3.0-only，许可全文见本项目 `LICENSE`。
-本项目改为 Node.js 实现，使用现有 SM3 和内置 crypto；仅接入播放请求，保留搜索、注册请求原有签名。
