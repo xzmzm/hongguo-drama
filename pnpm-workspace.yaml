@@ -9,3 +9,4 @@ packageImportMethod: copy
 publicHoistPattern:
   - postcss
   - proxy-from-env
+  - follow-redirects
