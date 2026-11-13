@@ -1,7 +1,9 @@
-<!-- 7.0 release target. -->
+<!-- 7.1 release target. -->
 # 第三方组件许可说明
 
-适用源码版本：红果短剧 6.9（发行目标）；以下第三方组件保留各自的版本、作者与许可，本轮未升级依赖。实际发行状态见 `docs/release-6.9.md`。
+适用源码版本：红果短剧 7.1（发行候选，尚未公开）；本轮 follow-redirects 升至1.16.3，Windows／Linux媒体构建增加固定nv-codec-headers 12.1.14.0；其余第三方组件保留各自的版本、作者与许可。实际发行状态见 `docs/release-7.1.md`。
+
+7.1采纳anupam-orbis在PR #140提供的实际依赖锁更新：follow-redirects从1.16.1升至1.16.3；本项目另补重定向安全回归。当前正式版为7.0，完整协作记录见 `CONTRIBUTORS.md`。
 
 本软件（红果短剧下载器）使用了以下第三方组件。各组件的版权归其各自作者所有，
 本软件对这些组件的使用均遵循其原始许可证。
@@ -14,12 +16,15 @@
 
 6.3开发候选在macOS arm64启用系统VideoToolbox H.264编码，保留x264回退；`scripts/librempeg-videotoolbox-prototype.patch`补齐固定上游版本缺失的内部函数声明，对应源码包同时包含该补丁及完整构建脚本。
 
+7.1高性能转换候选使双Mac Librempeg均支持VideoToolbox H.264编码，Windows／Linux的FFmpeg和Librempeg支持NVIDIA NVENC H.264编码；ByteVC2解码仍在CPU，不能据此宣称GPU硬解或实体NVIDIA已验收。详见`build/ffmpeg/LIBREMPEG-NOTICE.txt`。
+
 | 组件 | 版本 | 许可证 | 项目地址 |
 |---|---|---|---|
 | Electron | 44.9.1 | MIT | https://github.com/electron/electron |
 | React | 18.3.1 | MIT | https://github.com/facebook/react |
 | React DOM | 18.3.1 | MIT | https://github.com/facebook/react |
 | axios | 1.20.0 | MIT | https://github.com/axios/axios |
+| follow-redirects（axios依赖） | 1.16.3 | MIT | https://github.com/follow-redirects/follow-redirects |
 | electron-updater | 6.8.9 | MIT | https://github.com/electron-userland/electron-builder |
 
 Electron 打包产物中已包含 Chromium 与 Node.js 的许可声明：
@@ -37,7 +42,16 @@ Windows x64 内置从固定源码编译的 FFmpeg 9.0.2 与 x264 b35605ace3ddf7c
 x264 为唯一外部编解码静态库（GPLv2-or-later）；整体构建为 GPLv3-or-later。构建验证 x64 架构与系统 DLL 依赖。
 完整 FFmpeg/x264 对应源码、准确构建脚本、配置日志、工具链版本和二进制哈希随 Release 的 Windows 对应源码包提供。
 许可全文与来源说明见 `COPYING.GPLv3`、`COPYING.GPLv2`、`LICENSE.md`、`WINDOWS-X264-LICENSE.txt` 和 `WINDOWS-NOTICE.txt`。
-该精简构建提供软件 H.264 编码，不包含旧版 Gyan essentials 包及其额外库。
+该精简构建提供软件H.264及可选NVIDIA NVENC H.264编码，不包含旧版Gyan essentials包及其额外库。
+
+---
+
+### NVIDIA codec headers（MIT，仅Windows／Linux媒体构建）
+
+- 官方来源：https://github.com/FFmpeg/nv-codec-headers ，版本12.1.14.0，固定提交`1889e62e2d35ff7aa9baca2bceb14f053785e6f1`。
+- 源码归档SHA256：`e30d4791fd386de8b5c9f88dec781e546ec148b8808440dd421da5f26c2700ae`；下载和完整性校验见`scripts/prepare-nv-codec-headers.sh`。
+- 头文件的每份完整版权与MIT许可保留于随包的`NV-CODEC-HEADERS-LICENSE.txt`；Windows／Linux的FFmpeg和Librempeg对应源码同时包含该许可、固定头文件源码归档及准备脚本。
+- 只使用编码接口头文件，不捆绑NVIDIA驱动或运行库；运行时动态加载用户已有驱动。实际可用性须对当前输入试编码出帧，不能以编译含NVENC代替实体GPU验收。
 
 ---
 
