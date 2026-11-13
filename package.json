@@ -21,8 +21,8 @@
     "build:mac:dir": "node scripts/setup-ffmpeg-mac.js arm64 x64 && npm run build:react && electron-builder --mac --arm64 --x64 --dir --publish never",
     "test": "node scripts/test.cjs",
     "setup:software": "node scripts/setup-software-player.cjs",
-    "predev": "npm run setup:software",
-    "prebuild:react": "npm run setup:software",
+    "predev": "node scripts/setup-software-player.cjs",
+    "prebuild:react": "node scripts/setup-software-player.cjs",
     "build:linux": "npm run build:react && node scripts/check-linux-media.cjs && electron-builder --linux AppImage --x64 --publish never"
   },
   "dependencies": {
