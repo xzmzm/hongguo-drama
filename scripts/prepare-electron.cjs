@@ -31,15 +31,19 @@ const { execFileSync } = require('node:child_process');
   }
   assert(valid(), 'Official Electron asset size or SHA256 mismatch');
   const dist = path.join(root, 'node_modules/electron/dist');
+  fs.rmSync(dist, { recursive: true, force: true });
   fs.mkdirSync(dist, { recursive: true });
   if (process.platform === 'win32') {
-    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-      'Expand-Archive -LiteralPath $env:HONGGUO_ELECTRON_ZIP -DestinationPath $env:HONGGUO_ELECTRON_DIST -Force'],
-    { env: { ...process.env, HONGGUO_ELECTRON_ZIP: archive, HONGGUO_ELECTRON_DIST: dist }, stdio: 'pipe' });
+    execFileSync('tar.exe', ['-xf', archive, '-C', dist], { stdio: 'pipe' });
   } else if (process.platform === 'darwin') execFileSync('ditto', ['-x', '-k', archive, dist], { stdio: 'pipe' });
   else execFileSync('unzip', ['-q', '-o', archive, '-d', dist], { stdio: 'pipe' });
   const executable = process.platform === 'darwin' ? 'Electron.app/Contents/MacOS/Electron' : process.platform === 'win32' ? 'electron.exe' : 'electron';
   assert(fs.statSync(path.join(dist, executable)).isFile());
   fs.writeFileSync(path.join(root, 'node_modules/electron/path.txt'), executable);
   console.log(`PASS pinned official Electron ${version} ${process.platform}/${process.arch}: exact asset size and SHA256`);
-})().catch(() => { console.error('Verified official Electron runtime preparation failed'); process.exitCode = 1; });
+})().catch(error => {
+  const detail = String(error?.stderr || error?.message || error || '')
+    .replace(/https?:\/\/[^\s"']+/g, '[URL]').replace(/\s+/g, ' ').trim().slice(0, 400);
+  console.error(`Verified official Electron runtime preparation failed${detail ? `: ${detail}` : ''}`);
+  process.exitCode = 1;
+});

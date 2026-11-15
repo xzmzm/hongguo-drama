@@ -9,7 +9,7 @@ import { bindTouchHoldSpeed } from './touchHoldSpeed.mjs';
 import CommentDanmaku, { useCommentDanmaku } from './CommentDanmaku';
 import OfficialDanmaku, { useOfficialDanmaku } from './OfficialDanmaku';
 import { useDanmakuSource, writeDanmakuSource } from './danmakuSource.mjs';
-import { SHORTCUT_ACTIONS, formatShortcut, ignoresPlaybackShortcut, readShortcuts, shortcutKey, subscribeShortcuts } from '../shortcuts';
+import { SHORTCUT_ACTIONS, adjustPlaybackRate, formatShortcut, ignoresPlaybackShortcut, readShortcuts, shortcutKey, subscribeShortcuts } from '../shortcuts';
 import CommunityPanel from './CommunityPanel';
 import SequelFinder from './SequelFinder';
 import NasDownload from './NasDownload';
@@ -200,12 +200,14 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
   const autoCompatAttemptRef = useRef(null);
   const reconnectAttemptRef = useRef(null);
   const onlineSourceRef = useRef(null);
+  const onlineRecoveryPlayedRef = useRef(null);
   const lastVideoSrcRef = useRef('');
   const lastLoadRef = useRef(null);
   const fallbackRef = useRef(null);
   const fallbackAttemptRef = useRef(null);
   const rejectedLocalRef = useRef(null);
   const grantedLocalRef = useRef(null);
+  const retryAutoplayRef = useRef(false);
   const onlineQualityVersion = useRef(0);
 
   const holdVideoFrame = useCallback(() => {
@@ -233,6 +235,9 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
   const persistPosition = useCallback((force = false, ended = false) => {
     const media = loadedMediaRef.current;
     if (!media?.played || media.version !== mediaVersion.current) return;
+    // SoftwareVideo destroys the element's currentTime accessor on unmount; a later
+    // persist would read the native media-free clock and overwrite the real position.
+    if (media.element.__softwareDestroyed) return;
     const seconds = media.element.currentTime;
     if (!Number.isFinite(seconds) || seconds < 0) return;
     if (!force && Math.abs(seconds - lastSavedRef.current) < 3) return;
@@ -418,6 +423,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
     || (ep.fileUrl ? '本地文件本次加载失败，文件已保留；可重试本集、切换解码方式或使用系统播放器' : '本地文件不可用，请在下载管理检查文件'), [localQualityError]);
 
   const resumeLocal = useCallback((ep, seekTo, autoplay = true) => {
+    onlineRecoveryPlayedRef.current = null;
     const key = localMediaKey(selectedSeriesRef.current, ep), granted = grantedLocalRef.current === key;
     resetPlayback(autoplay);
     if (granted) grantedLocalRef.current = key;
@@ -553,6 +559,21 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
       if (r && r.success) setCompatCache({ files: r.files, bytes: r.bytes });
     });
   }, [refreshCacheInfo]);
+
+  // Settings page saves in the same renderer process; keep a retained player (floating/PiP)
+  // in sync so auto-delete and other playback options never use a stale switch.
+  useEffect(() => {
+    const sync = (event) => {
+      const s = event?.detail;
+      if (!s) return;
+      setAutoDelete(s.auto_delete_watched === true);
+      setCacheNext(s.cache_next_episode !== false);
+      setAutoCompat(s.compat_mode !== false);
+      setShowDanmakuControls(s.show_danmaku_controls !== false);
+    };
+    window.addEventListener('hongguo-playback-settings', sync);
+    return () => window.removeEventListener('hongguo-playback-settings', sync);
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -1049,6 +1070,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
         onlineQualityRef.current = request;
         if (!usedPrefetch && !res.cached) setMediaBuffering(true);
         setOnlineUrl(res.url);
+        onlineRecoveryPlayedRef.current = `${activeSeriesId}:${vidIndex}`;
         setOnlineProgress(null);
         // Playback cache changes do not need a synchronous scan of all download directories.
         refreshOnlineCacheInfo();
@@ -1111,24 +1133,27 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
     if (!activeRef.current || navigation !== navigationVersion.current || version !== mediaVersion.current || selection !== selectionVersion.current) return;
     prefetchRejectedRef.current = false;
     const latest = data?.episodes.find(ep => ep.vid_index === currentIndex && ep.vid === current?.vid);
-    if (usableLocal(latest, String(activeSeriesId), true)) {
+    const onlineRecovery = onlineSourceRef.current === `${activeSeriesId}:${currentIndex}`;
+    const keepPlayedOnline = onlineRecoveryPlayedRef.current === `${activeSeriesId}:${currentIndex}`;
+    if (!keepPlayedOnline && usableLocal(latest, String(activeSeriesId), true)) {
       rejectedLocalRef.current = null;
       fallbackAttemptRef.current = null;
       reconnectAttemptRef.current = null;
       resumeLocal(latest, seekTo, autoplay);
       return;
     }
-    if (latest?.status === 'completed' && !latest.locked) {
+    if (!keepPlayedOnline && latest?.status === 'completed' && !latest.locked) {
       setPlaybackError(localPlaybackError(latest, String(activeSeriesId)));
       return;
     }
     setCompatMap(prev => { const next = { ...prev }; delete next[currentIndex]; return next; });
-    if (onlineSourceRef.current === `${activeSeriesId}:${currentIndex}` || current?.status !== 'completed') {
+    if (onlineRecovery || keepPlayedOnline || current?.status !== 'completed') {
       fallbackAttemptRef.current = null;
       reconnectAttemptRef.current = null;
       startOnlinePlay(currentIndex, currentPosition(), true, autoplay);
     } else goToEpisode(currentIndex, currentPosition(), autoplay);
   };
+  const retryUserPlayback = () => retryPlayback(retryAutoplayRef.current);
 
   const changeOnlineQuality = (quality) => {
     if (!['auto', '720p', '1080p', 'compat'].includes(quality) || !supportsOnlineQuality) return;
@@ -1350,6 +1375,9 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
     const v = event.currentTarget;
     if (!canPlay || playbackVersion !== mediaVersion.current || v !== videoRef.current || !current || current.locked) return;
     if (v.currentSrc && v.currentSrc !== videoSrc) return;
+    // Software decoding emits only loadedmetadata while paused (no MediaStream is attached
+    // before play), so onCanPlay never fires and the buffering overlay would block clicks.
+    if (softwareDecode) setMediaBuffering(false);
     loadedMediaRef.current = { element: v, seriesId: activeSeriesId, vidIndex: currentIndex, version: mediaVersion.current, played: false };
     v.defaultPlaybackRate = playbackRateRef.current;
     v.playbackRate = playbackRateRef.current;
@@ -1467,7 +1495,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
         else showToast(action.id === 'previous' ? '已经是第一集' : '已经是最后一集');
       } else if (action.id === 'autoNext') setAutoNext(!nextEnabled);
       else if (action.id === 'fullscreen') toggleFullscreen();
-      else changePlaybackRate(playbackRateRef.current + (action.id === 'slower' ? -0.25 : 0.25));
+      else changePlaybackRate(adjustPlaybackRate(playbackRateRef.current, action.id, shortcuts.speedStep));
     };
     const onKeyUp = event => {
       if (!held.delete(event.code || event.key)) return;
@@ -2036,7 +2064,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
         }}>
           {rateNotice !== null && <div className="player-rate-notice" role="status" aria-live="polite">{t(rateNotice)}×</div>}
           <VideoElement
-            {...(softwareDecode ? { videoRef } : { ref: videoRef })}
+            {...(softwareDecode ? { videoRef, onBeforeDestroy: () => persistPosition(true) } : { ref: videoRef })}
             crossOrigin="anonymous"
             src={videoSrc || undefined}
             className="player-video"
@@ -2086,6 +2114,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
               if (!canPlay || compatRequestRef.current || playbackVersion !== mediaVersion.current) return;
               if (videoRef.current && event.currentTarget !== videoRef.current) return;
               if (event.currentTarget.currentSrc && event.currentTarget.currentSrc !== videoSrc) return;
+              retryAutoplayRef.current = !event.currentTarget.paused;
               const errorCode = event.currentTarget.error?.code;
               // Chromium also reports an unavailable HTTP stream as unsupported source (4).
               const unavailableOnline = errorCode === 4 && videoSrc === onlineUrl;
@@ -2143,7 +2172,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
           <div className={`player-placeholder${holdingFrame && !playbackError ? ' player-placeholder-over-frame' : ''}`} style={{ position: 'absolute', inset: 0, zIndex: 3 }}>
             {t(playbackError ? (
               <><Film size={34} /><p role="alert">{t(playbackError)}</p><div className="player-placeholder-actions">
-                <button className="btn btn-primary" onClick={() => retryPlayback()}>{t(current?.status === 'completed' ? '重试本集' : '重试本集（在线播放）')}</button>
+                <button className="btn btn-primary" onClick={retryUserPlayback}>{t(current?.status === 'completed' ? '重试本集' : '重试本集（在线播放）')}</button>
                 {!mobile && String(detail?.series_id) === String(activeSeriesId) && !fallbackRef.current?.submitting && canChooseLocal(current, String(activeSeriesId)) && <button className="btn btn-outline" onClick={chooseLocalPlayback}>{t("播放已有本地文件")}</button>}
                 {current?.vid && <button className="btn btn-outline" onClick={() => startOnlinePlay(currentIndex, undefined, true)}>{t("重新连接片源")}</button>}
                 {!mobile && current?.vid && !current.locked && (decodeFailed || current?.status === 'completed') && !fallbackRef.current?.submitting && <button className="btn btn-outline" onClick={() => startCompatPlay(currentIndex, true)}>{t("转码后播放")}</button>}
@@ -2257,7 +2286,7 @@ function Player({ target, onNavigate, onSeriesSelected, onFloatingChange, onTitl
               {t(compatError || (mobile ? '请重新连接片源，或在播放设置中更换画质。安卓兼容转码尚未接入。' : '请先重新连接片源；若仍有画面或格式问题，可尝试转码为 H.264 兼容格式。'))}
             </span>
             <div className="player-placeholder-actions">
-              <button className="btn btn-primary" onClick={() => retryPlayback()}>{t("重试本集")}</button>
+              <button className="btn btn-primary" onClick={retryUserPlayback}>{t("重试本集")}</button>
               <button className="btn btn-outline" onClick={() => startOnlinePlay(currentIndex, undefined, true)}>{t("重新连接片源")}</button>
               {!mobile && <button className="btn btn-outline" onClick={() => startCompatPlay(currentIndex, true)}>
                 <Zap size={15} />{t("重新转码后播放")}</button>}
