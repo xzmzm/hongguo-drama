@@ -11,6 +11,7 @@ const { gzipSync } = require('node:zlib');
 const { setTimeout: delay } = require('node:timers/promises');
 const { registerPlaybackDevice } = require('./playback-device');
 const { signPlayer } = require('./playback-signature');
+const { prepareUsbSigner, signPlaybackRequest } = require('./usb-signer');
 const { abortError, throwIfAborted, boundedSignal, networkFailure } = require('./request-signal');
 const sm3 = require('./sm3');
 const { normalizeDownloadQuality, meetsDownloadQuality } = require('./download-quality');
@@ -435,7 +436,9 @@ async function fetchAppPlayUrlFresh(vid, options) {
         for (let attempt = 0; attempt < 2; attempt++) {
             throwIfAborted(signal);
             // Prefer the current API; only an empty response enables one legacy attempt.
-            const signed = playbackRequest(payload, identity, attempt ? '' : vid);
+            await prepareUsbSigner({ signal, deadline });
+            throwIfAborted(signal);
+            const signed = await signPlaybackRequest(playbackRequest(payload, identity, attempt ? '' : vid), identity, { signal, deadline });
             if (attempt) signed.headers.Connection = 'close';
             try {
                 response = await requestJson(signed.url, { method: signed.method, headers: signed.headers, data: signed.body }, deadline, signal);

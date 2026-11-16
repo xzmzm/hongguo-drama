@@ -267,6 +267,8 @@ function getDefaultSettings() {
     search_app_enabled: false,
     // 海外加速：在线播放/下载优先改用 fqnovelvod.com 线路，失败自动回退原地址。
     fast_cdn_host: false,
+    // 可选：通过已授权的 USB 手机签名；默认关闭，不启动 adb。
+    usb_signer: false,
     // ===== 网络代理 =====
     // proxy_enabled: 是否启用代理（关闭时忽略系统代理，直连）
     // proxy_mode:    system=跟随系统/环境变量 · custom=手动指定 · direct=强制直连
@@ -517,6 +519,7 @@ function getCurrentSettings() {
   const merged = { ...getDefaultSettings(), ...saved };
   merged.stealth_wake_region = normalizeStealthWakeRegion(merged.stealth_wake_region);
   merged.fast_conversion = merged.fast_conversion === true;
+  merged.usb_signer = merged.usb_signer === true;
   // 保证并发数合法
   const mc = parseInt(merged.max_concurrent, 10);
   MAX_CONCURRENT_DOWNLOADS = Number.isInteger(mc) && mc >= 1 && mc <= 10 ? mc : 3;
@@ -4868,7 +4871,7 @@ ipcMain.handle('select-folder', async () => {
   return result.filePaths[0];
 });
 
-const SETTINGS_KEYS = ['root', 'name_format', 'max_concurrent', 'download_quality', 'download_metadata', 'export_text', 'auto_delete_watched', 'compat_mode', 'fast_conversion', 'cache_next_episode', 'picture_in_picture_mode', 'stealth_wake_region', 'show_danmaku_controls', 'app_updates_enabled', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'fast_cdn_host', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'];
+const SETTINGS_KEYS = ['root', 'name_format', 'max_concurrent', 'download_quality', 'download_metadata', 'export_text', 'auto_delete_watched', 'compat_mode', 'fast_conversion', 'cache_next_episode', 'picture_in_picture_mode', 'stealth_wake_region', 'show_danmaku_controls', 'app_updates_enabled', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'fast_cdn_host', 'usb_signer', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'];
 
 function normalizeTextExportKinds(value) {
   return { danmaku: value?.danmaku === true, comments: value?.comments === true, reviews: value?.reviews === true };
@@ -4884,6 +4887,7 @@ function settingsForRenderer(settings) {
 function applyEditableSettings(current, incoming) {
   const source = normalizeProxySettings(incoming && typeof incoming === 'object' ? incoming : {});
   if (Object.prototype.hasOwnProperty.call(source, 'fast_conversion') && typeof source.fast_conversion !== 'boolean') throw new Error('显卡加速设置必须为开关值');
+  if (Object.prototype.hasOwnProperty.call(source, 'usb_signer') && typeof source.usb_signer !== 'boolean') throw new Error('USB 手机签名设置必须为开关值');
   if (Object.prototype.hasOwnProperty.call(source, 'picture_in_picture_mode')
     && !['native', 'custom'].includes(source.picture_in_picture_mode)) throw new Error('不支持的画中画小窗模式');
   const merged = { ...current };
@@ -6066,6 +6070,7 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
   try {
     const dataFile = path.join(app.getPath('userData'), 'data.json');
     store.init(dataFile, { safeStorage });
+    require('./src/native/usb-signer').configureUsbSigner({ isEnabled: () => getCurrentSettings().usb_signer === true });
     setDeviceIdentityFile(path.join(app.getPath('userData'), 'danmaku-client.json'));
     loadDownloadTasks();
     loadSeriesRegistry();

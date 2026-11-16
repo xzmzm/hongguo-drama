@@ -17,11 +17,12 @@ const model = () => ({ video_id: 'synthetic-video', video_duration: 60, video_li
 const response = data => ({ status: 200, headers: {}, data: JSON.stringify(data) });
 const nested = value => ({ code: 0, data: { video_model_data: { [vid]: { video_model: value } } } });
 
-function fixture(tabResponse, { legacyResponse, signal } = {}) {
+function fixture(tabResponse, { legacyResponse, signal, usbSigner } = {}) {
     const calls = [], signatures = [];
     let registrations = 0;
     const module = { exports: {} };
     const context = { module, Buffer, URL, AbortSignal, setTimeout, clearTimeout, require(name) {
+        if (name === './usb-signer' && usbSigner) return usbSigner;
         if (name === './playback-device') return { registerPlaybackDevice: async () => {
             registrations++;
             return identity;
@@ -59,6 +60,47 @@ function assertPlayerBinding(f, request, index) {
     assert.ok(Buffer.from(request.headers['x-argus'], 'base64').length > 4);
     assert.ok(Buffer.from(request.headers['x-ladon'], 'base64').length > 4);
 }
+
+test('USB signing prepares before each fresh request and receives exact final GET and gzip POST bytes', async () => {
+    const flow = [], signed = [];
+    const f = fixture({ status: 200, headers: {}, data: '' }, {
+        legacyResponse: response({ code: 0, data: { [vid]: { video_model: model() } } }),
+        usbSigner: {
+            prepareUsbSigner: async () => flow.push('prepare'),
+            signPlaybackRequest: async (request, registered, options) => {
+                flow.push('sign'); assert.equal(registered, identity); assert.ok(options.deadline > Date.now());
+                signed.push(request);
+                return { ...request, headers: { ...request.headers, 'x-argus': 'usb-fixture' } };
+            },
+        },
+    });
+    assert.equal((await f.fetch()).url, media);
+    assert.deepEqual(flow, ['prepare', 'sign', 'prepare', 'sign']);
+    for (let i = 0; i < 2; i++) {
+        assert.equal(signed[i].url, f.calls[i].url); assert.equal(signed[i].body, f.calls[i].data);
+        assert.equal(f.calls[i].headers['x-argus'], 'usb-fixture');
+    }
+    assert.equal(signed[0].body, null); assert.ok(Buffer.isBuffer(signed[1].body));
+});
+
+test('an unavailable USB signer never sends unsigned model requests or retries the legacy API', async () => {
+    const f = fixture(response(nested(model())), { usbSigner: {
+        prepareUsbSigner: async () => {},
+        signPlaybackRequest: async () => { throw Object.assign(new Error('USB unavailable'), { code: 'USB_SIGNER_UNAVAILABLE' }); },
+    } });
+    await assert.rejects(f.fetch(), { code: 'USB_SIGNER_UNAVAILABLE' });
+    assert.equal(f.calls.length, 0);
+});
+
+test('cancel during USB startup prevents both signing and the model request', async () => {
+    const controller = new AbortController();
+    const f = fixture(response(nested(model())), { signal: controller.signal, usbSigner: {
+        prepareUsbSigner: async () => controller.abort(),
+        signPlaybackRequest: async () => assert.fail('canceled startup cannot sign'),
+    } });
+    await assert.rejects(f.fetch(), { code: 'ERR_CANCELED' });
+    assert.equal(f.calls.length, 0);
+});
 
 test('model first GET uses one real551/Ladon signature over its final query and time', async () => {
     const f = fixture(response(nested(model())));

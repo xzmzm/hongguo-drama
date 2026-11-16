@@ -737,6 +737,7 @@ function sourceFailure(source, error) {
   const message = String(error?.message || '');
   const code = String(error?.code || '');
   if (code === 'ERR_CANCELED') return { source, code, message: '已取消 App 片源请求' };
+  if (code === 'USB_SIGNER_UNAVAILABLE') return { source, code, message: 'USB 手机签名不可用，请连接已授权的手机并确认签名服务已安装；也可在设置中关闭 USB 手机签名' };
   const networkDetails = { DNS: 'DNS 解析失败', CONNECTION: '连接失败', TLS: 'TLS 证书或握手失败' };
   const network = typeof error?.networkFailure === 'string' && Object.hasOwn(networkDetails, error.networkFailure)
     ? { networkFailure: error.networkFailure } : {};
