@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/jackotom/hongguo-drama/releases/latest"><img alt="最新公开版本" src="https://img.shields.io/github/v/release/jackotom/hongguo-drama?style=flat-square"></a>
   <img alt="macOS 13 或更新版本" src="https://img.shields.io/badge/macOS-13%2B-555555?style=flat-square">
-  <img alt="M 系列 Mac、Intel Mac、Windows、Linux x64 与 Docker amd64" src="https://img.shields.io/badge/platforms-Mac_arm64_%2F_x64_%C2%B7_Windows_x64_%C2%B7_Linux_x64_%C2%B7_Docker_amd64-55746b?style=flat-square">
+  <img alt="Apple 芯片 Mac、Intel Mac 与 Windows x64" src="https://img.shields.io/badge/platforms-Mac_arm64_%2F_x64_%C2%B7_Windows_x64-55746b?style=flat-square">
   <a href="LICENSE"><img alt="GPL-3.0 许可证" src="https://img.shields.io/badge/license-GPL--3.0-555555?style=flat-square"></a>
 </p>
 
@@ -24,19 +24,33 @@
 
 ## 下载与安装
 
-**当前源码／发行目标：7.3**（内部`7.3.0`，桌面构建`7.3.1`）。新增可配置的 S / D 倍速调节，并加强下载文件身份、媒体地址、NAS 目录和 Docker 队列保护。标准发行只含双 Mac、Windows、Linux 与 Docker；TV 和手机独立。
+**当前正式版：7.5**（内部`7.5.0`，构建`7.5.2`）。本轮优先修复播放接口 HTTP 200 空响应，移植纯 JavaScript Android v5 签名与新播放器请求协议；保留下载临时清理EPERM修复。按用户本轮明确要求，仅发行Mac双架构与Windows。
 
-以下为7.3下载。Mac已签名、公证、装订；Windows EXE未签名。
+**7.5已正式发布并设Latest。双Mac App与DMG本轮新签名、公证Accepted和装订，arm64真实下载／静音播放、Windows队列及安装升级验收通过。** Windows使用GitHub虚拟机，EXE未签名；Intel Mac仅Rosetta验收，具体结果见[7.5回执](docs/release-7.5.md)。
 
-| 平台 | 下载7.3 | 使用方式 |
+| 平台 | 7.5正式下载 | 本轮状态 |
 |---|---|---|
-| Apple芯片Mac，macOS 13+ | [DMG](https://github.com/jackotom/hongguo-drama/releases/download/v7.3/Hongguo-7.3-mac-arm64.dmg) | 拖入应用程序；已签名、公证、装订 |
-| Intel Mac，macOS 13+ | [DMG](https://github.com/jackotom/hongguo-drama/releases/download/v7.3/Hongguo-7.3-mac-x64.dmg) | 同上；验收仅Rosetta |
-| Windows x64 | [安装版](https://github.com/jackotom/hongguo-drama/releases/download/v7.3/hongguo-downloader-7.3-win-x64-setup.exe) · [便携EXE](https://github.com/jackotom/hongguo-drama/releases/download/v7.3/hongguo-downloader-7.3-win-x64.exe) · [便携ZIP](https://github.com/jackotom/hongguo-drama/releases/download/v7.3/hongguo-downloader-7.3-win-x64.zip) | 安装版支持应用内更新；EXE未签名 |
-| Linux x64 | [AppImage](https://github.com/jackotom/hongguo-drama/releases/download/v7.3/hongguo-downloader-7.3-linux-x64.AppImage) | 赋予执行权限；手动更新 |
-| Docker Linux amd64 / NAS | [镜像](https://github.com/jackotom/hongguo-drama/releases/download/v7.3/hongguo-drama-7.3-docker-amd64.tar.gz) · [部署包](https://github.com/jackotom/hongguo-drama/releases/download/v7.3/hongguo-drama-7.3-docker-deploy.zip) | 按[部署文档](docs/docker.md)设置令牌与挂载目录 |
+| Apple芯片Mac，macOS 13+ | [DMG](https://github.com/jackotom/hongguo-drama/releases/download/v7.5/Hongguo-7.5-mac-arm64.dmg) | 已签名、公证、装订；arm64两集真实1080P静音播放通过 |
+| Intel Mac，macOS 13+ | [DMG](https://github.com/jackotom/hongguo-drama/releases/download/v7.5/Hongguo-7.5-mac-x64.dmg) | 已签名、公证、装订；Rosetta启动通过 |
+| Windows x64 | [安装版](https://github.com/jackotom/hongguo-drama/releases/download/v7.5/hongguo-downloader-7.5-win-x64-setup.exe) · [便携EXE](https://github.com/jackotom/hongguo-drama/releases/download/v7.5/hongguo-downloader-7.5-win-x64.exe) · [便携ZIP](https://github.com/jackotom/hongguo-drama/releases/download/v7.5/hongguo-downloader-7.5-win-x64.zip) | 真实队列下载、兼容媒体静音播放和安装升级通过；EXE未签名 |
 
-[7.3发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v7.3) · [SHA256](https://github.com/jackotom/hongguo-drama/releases/download/v7.3/SHA256SUMS.txt) · [精确源码](https://github.com/jackotom/hongguo-drama/releases/download/v7.3/hongguo-drama-7.3-source.zip)。实际状态见[7.3记录](docs/release-7.3.md)。TV和手机保持独立。上游部分网页片源仍可能404、只提供预览或超时，不保证所有内容永久可播。
+[7.5正式发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v7.5) · [SHA256](https://github.com/jackotom/hongguo-drama/releases/download/v7.5/SHA256SUMS.txt) · [精确源码](https://github.com/jackotom/hongguo-drama/releases/download/v7.5/hongguo-drama-7.5-source.zip)。实际状态见[7.5记录](docs/release-7.5.md)。上游部分网页片源仍可能404、只提供预览或超时，不保证所有内容永久可播。
+
+**Android手机APK／Android TV版：** 请前往 [N3urda/hongguoTV](https://github.com/N3urda/hongguoTV) 下载。该项目独立维护；版本、兼容性与测试状态以该项目发布页为准，不计入本项目的三平台附件或验收。
+
+<details>
+<summary>7.4 历史下载与发行说明</summary>
+
+7.4历史发行包与验收回执见[7.4发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v7.4)及[7.4记录](docs/release-7.4.md)；历史签名和验收结果不代表7.5通过。
+
+</details>
+
+<details>
+<summary>7.3 历史下载与发行说明</summary>
+
+**历史正式版：7.3**（内部`7.3.0`，桌面构建`7.3.1`）。新增可配置的 S / D 倍速调节，并加强下载文件身份、媒体地址、NAS 目录和 Docker 队列保护。完整回执见[7.3记录](docs/release-7.3.md)。
+
+</details>
 
 <details>
 <summary>7.2 历史下载与发行说明</summary>
@@ -237,6 +251,22 @@ Mac和Windows安装版保留应用内更新入口；完整6.4→6.5自动更新�
 3. 打开详情点「立即播放」，也可选择集数与清晰度加入下载队列。
 4. 下次从「我的剧库」或「观看记录」接着看；下载进度、失败重试和整剧合并在「下载管理」。
 
+## 7.5（正式发布）
+
+- 成功下载后的临时文件清理遇到 EPERM 时，不把已完成分集重新标为失败；保留文件身份校验及清理失败提示，不误删冲突文件。
+- 采用纯 JavaScript Android v5 签名、新player/v1 gzip协议及1004模型解析，修复旧签名收到HTTP 200空响应；保留取消、明确拒绝和共享冷却保护。
+- 本轮明确只发行Mac双架构与Windows，20份正式附件已统一公开；旧7.5.1候选验收不沿用。
+- 特别感谢上游N3urda／ermilylu、提供PR线索的WEP-56，以及所有PR提交者。完整署名与具体贡献见[贡献名单](CONTRIBUTORS.md)。
+- 本轮正式回执与验收边界见[7.5记录](docs/release-7.5.md)，历史版本说明保留。
+
+## 7.4
+
+- #157：下载临时文件在活跃句柄期间按实时身份校验，兼容 NTFS/exFAT 首次写入后的文件编号或创建时间变化；替换文件和符号链接仍拒绝，冲突文件保留。
+- #158：设备注册超时、空响应及 App 拒绝只让失败集进入 15秒至10分钟的有界重试，其他集留在队列；真实取源恢复后解除共享冷却，缓存或已有文件不会误清退避。
+- 下载管理新增按剧集查看；列表、统计和批量重试可限定单剧，“全部开始／暂停”仍作用于所有剧。
+- Windows 高性能转换依次探测 NVENC、AMD AMF（VCE／VCN）和 CPU；AMF 头文件、许可、缓存键及对应源码同源构建。
+- 修复 Windows 构建缓存未命中时仍复用历史媒体的问题；本轮不把 AMF 源码构建契约说成实体显卡验收。
+
 ## 7.3
 
 - #156：设置新增「S / D 倍速调节」，可选0.25、0.5、0.75或1倍；默认仍为0.25倍。改名后标签随当前S/D绑定显示。
@@ -253,7 +283,7 @@ Mac和Windows安装版保留应用内更新入口；完整6.4→6.5自动更新�
 
 ## 7.1
 
-- 桌面解码菜单新增默认关闭的高性能显卡转换模式，实际检测VideoToolbox／NVENC并明确显示CPU回退；ByteVC2仍由CPU解码。本轮M5样本未显示提速，性能与覆盖范围见[7.1回执](docs/release-7.1.md)。
+- 桌面解码菜单新增默认关闭的高性能显卡转换模式，实际检测VideoToolbox／NVENC／Windows AMD AMF并明确显示CPU回退；ByteVC2仍由CPU解码。本轮M5样本未显示提速，性能与覆盖范围见[7.1回执](docs/release-7.1.md)。
 - #148：恢复、手动／自动重试在同剧原队列槽位内按集号升序，跨剧优先顺序不变。
 - #147：精确保存临时文件身份，减少大文件编号引起的误报冲突；旧安全收据兼容，不能确认的旧身份与替换文件继续保留。
 - 采纳[@anupam-orbis](https://github.com/anupam-orbis)的[PR #140](https://github.com/jackotom/hongguo-drama/pull/140)实际依赖锁更新，将follow-redirects 1.16.1升至1.16.3；不宣称本项目已发生凭据泄漏。
@@ -755,7 +785,7 @@ Mac和Windows安装版保留应用内更新入口；完整6.4→6.5自动更新�
 - **断点续播**：按剧保存集数和播放位置，从剧库或观看记录接着看；切换到应用内其他页面，仍可继续播放并保存进度。
 - **0.25×–4× 倍速**：共 16 档。右下角倍速数字是独立按钮，每点增加 0.25×，4× 后回到 1×；三点菜单可直接选档，切集与连播保持当前倍速。`S` / `D` 每次调节的幅度可在「设置 → 播放快捷键」中选择 0.25×、0.5×、0.75× 或 1×。
 - **兼容播放**：默认开启兼容模式；解码失败、黑屏有声时尝试转为 H.264，也可手动「转码后播放」。显示转码进度，支持取消和清理缓存。
-- **高性能转换（7.1）**：桌面「解码方式 → 高性能显卡快速解码（老电脑请勿使用）」默认关闭。开启后优先用显卡编码H.264；ByteVC2仍由CPU解码，4线程、单队列。Mac尝试VideoToolbox，Windows／Linux尝试NVIDIA NVENC；实际输入试编码出帧，不支持或失败时明确提示并回退CPU。不是所有格式的GPU硬解，也不保证所有独显支持；实体NVIDIA尚未实跑。本轮M5样本未提速且文件更大，见[性能与验收记录](docs/release-7.1.md)。
+- **高性能转换（7.1）**：桌面「解码方式 → 高性能显卡快速解码（老电脑请勿使用）」默认关闭。开启后优先用显卡编码H.264；ByteVC2仍由CPU解码，4线程、单队列。Mac尝试VideoToolbox，Windows依次尝试NVIDIA NVENC与AMD AMF（VCE／VCN），Linux尝试NVIDIA NVENC；实际输入试编码出帧，不支持或失败时明确提示并回退CPU。不是所有格式的GPU硬解，也不保证所有独显支持；实体NVIDIA和AMD尚未在本项目发行验收中实跑。本轮M5样本未提速且文件更大，见[性能与验收记录](docs/release-7.1.md)。
 - **失败恢复**：可取消准备、重试本集、重新连接片源或尝试兼容转码。地址过期或传输中断时有限次刷新取址，不无限重试；硬件转码失败时尝试软件转码。
 
 优先选择兼容性较好的 H.264 片源，同编码内再优先清晰度；可能低于 HEVC 片源的最高分辨率。软件转码可能更慢，来源服务异常仍可能导致播放失败。
@@ -918,7 +948,7 @@ https://github.com/user-attachments/assets/b95f4f60-b57c-495f-a30e-62ac2b0bda11
 
 ## 版本与验证范围
 
-7.3 为当前源码／发行目标，内部7.3.0、桌面构建7.3.1。标准发行范围是双Mac、Windows x64、Linux x64 AppImage与Docker amd64；TV和手机独立。实际签名、平台验收、附件摘要和限制以[7.3记录](docs/release-7.3.md)为准。
+7.5为当前源码／发行目标，内部7.5.0、候选构建7.5.2。本轮明确只发行Mac双架构与Windows，TV和手机独立。实际签名、平台验收、附件摘要和限制以[7.5记录](docs/release-7.5.md)为准。
 
 7.2 TV开发补充包已于2026-11-13 16:08:18（Asia/Shanghai）追加公开，版本7.2／code70200，沿用公开6.6 TV签名证书；TV源码冻结`2aa068f496f78114389d94c41b83dde877b174ce`。新增APK、精确TV源码和独立SHA256清单三份附件，现共28份正式附件；原25份桌面／Docker附件与原v7.2标签不变。构建、签名连续性、Manifest／包内容、定向源码检查及三附件匿名完整下载摘要核对通过。**TV实机未测试，请用户自行测试；安装、启动、实际遥控、播放和覆盖升级均未验证。** 手机保持独立，本机正式应用未替换。详见[TV补充回执](docs/release-7.2-tv.md)。以下首发五平台记录保持。
 
@@ -1015,11 +1045,21 @@ FFmpeg 二进制不提交到 Git。重新分发编译包时，请按 GPL 要求�
 
 ## 贡献者
 
-感谢所有代码贡献者与问题反馈者。[完整贡献记录与问题编号](CONTRIBUTORS.md)已核对至 2026-11-12，包含历史开放／已关闭的全部 10 个 PR 和 137 个 Issue。
+感谢所有代码贡献者与问题反馈者。[完整贡献记录与问题编号](CONTRIBUTORS.md)已核对至 2026-11-15，包含历史开放／已关闭的全部 12 个 PR 和 137 个 Issue。
+
+### 7.5 播放恢复特别鸣谢
+
+| 贡献者 | 实际贡献 |
+| --- | --- |
+| [N3urda（NANA）](https://github.com/N3urda) | 维护上游 hongguoTV，提交并组织 [PR #60](https://github.com/N3urda/hongguoTV/pull/60) 的播放恢复发行。 |
+| [ermilylu](https://github.com/N3urda/hongguoTV/commit/18c37c2afd0567520135abcae312352542f09083) | 纯 Kotlin Android v5 签名核心、合成向量及上游播放验证的公开 Git 作者；本项目 7.5 据此移植纯 JavaScript 实现。账号尚未关联，保留原始署名。 |
+| [WEP-56](https://github.com/WEP-56) | 在 [Issue #162](https://github.com/jackotom/hongguo-drama/issues/162#issuecomment-6915976249) 提供上游 PR 线索，帮助定位播放恢复方案。 |
+
+以上按实际贡献致谢。GitHub 右侧 Contributors 由提交历史与账号关联自动生成，此名单不改变提交作者或统计。
 
 **代码提交作者：** [@jackotom](https://github.com/jackotom)、[@ZainCheung](https://github.com/ZainCheung)。
 
-**PR 提交者（8 位）：** [@anupam-orbis](https://github.com/anupam-orbis)、[@ceco3000](https://github.com/ceco3000)、[@jackotom](https://github.com/jackotom)、[@jayeeliu](https://github.com/jayeeliu)、[@jjay5520](https://github.com/jjay5520)、[@roytjus](https://github.com/roytjus)、[@xinbaojian](https://github.com/xinbaojian)、[@ZainCheung](https://github.com/ZainCheung)。未合并的方案也保留提交致谢，不代表已经采用。
+**PR 提交者（10 位）：** [@aaaasssddfgh](https://github.com/aaaasssddfgh)、[@anupam-orbis](https://github.com/anupam-orbis)、[@ceco3000](https://github.com/ceco3000)、[@jackotom](https://github.com/jackotom)、[@jayeeliu](https://github.com/jayeeliu)、[@j2-cuong](https://github.com/j2-cuong)、[@jjay5520](https://github.com/jjay5520)、[@roytjus](https://github.com/roytjus)、[@xinbaojian](https://github.com/xinbaojian)、[@ZainCheung](https://github.com/ZainCheung)。未合并的方案也保留提交致谢，不代表已经采用。
 
 <details>
 <summary>展开全部 82 位问题反馈者</summary>

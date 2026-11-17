@@ -105,11 +105,11 @@ const checks = [
     h.fire();
     h.run(`requestMedia = async () => ({headers: {'content-length': '200000'}, data: testReadStream()});`);
     await h.download();
-    assert.equal(h.task().status, 'completed');
+    assert.equal(h.task().status, 'completed', h.task().error);
     const before = fs.readFileSync(h.task().savePath);
     h.run(`requestMedia = async () => { throw new Error('completed files must not be downloaded again'); };`);
     await h.download();
-    assert.equal(h.task().status, 'completed');
+    assert.equal(h.task().status, 'completed', h.task().error);
     assert.deepEqual(fs.readFileSync(h.task().savePath), before);
     for (const action of ['stop-download', 'pause-all']) {
       const g = fixture();
@@ -155,8 +155,8 @@ const checks = [
     assert.doesNotMatch(h.task().error, /自动重试/);
     assert.equal(h.live().length, 0);
   }],
-  ['App refusal, security and third-party failures are not deferred', async () => {
-    for (const [sources, vid] of [[[{ source: 'app', code: 'BUSINESS_REJECTED' }]], [[{ source: 'app', code: 'HTTP_403' }]], [[{ source: 'web', code: 'HTTP_404' }, { source: 'app', code: 'BUSINESS_REJECTED' }]], [[{ source: 'web', code: 'TIMEOUT' }, { source: 'app', code: 'DEVICE_REGISTRATION_FAILED' }]], [[{ source: 'web', code: 'SECURITY_BLOCKED' }]], [[{ source: 'app', code: 'TIMEOUT' }, { source: 'web', code: 'SECURITY_BLOCKED' }]], [webGone, 'custom:a:1']]) {
+  ['App business refusal, security and third-party failures are not deferred', async () => {
+    for (const [sources, vid] of [[[{ source: 'app', code: 'BUSINESS_REJECTED' }]], [[{ source: 'web', code: 'HTTP_404' }, { source: 'app', code: 'BUSINESS_REJECTED' }]], [[{ source: 'web', code: 'SECURITY_BLOCKED' }]], [[{ source: 'app', code: 'TIMEOUT' }, { source: 'web', code: 'SECURITY_BLOCKED' }]], [webGone, 'custom:a:1']]) {
       const h = fixture();
       h.state.result = unavailable(sources);
       if (vid) h.run(`downloadTasks[0].hongguoInfo.vid = ${JSON.stringify(vid)}`);

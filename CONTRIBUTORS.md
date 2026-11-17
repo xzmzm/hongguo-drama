@@ -1,10 +1,24 @@
+<!-- 7.5 source and release target; historical credits retained. -->
 # 贡献者与问题反馈致谢
+
+## 7.5 播放修复特别致谢（2026-11-16）
+
+这次播放恢复最关键的帮助，来自愿意公开代码、复现过程和验证证据的开发者：
+
+- **[@N3urda（NANA）](https://github.com/N3urda)**：维护上游 hongguoTV，提交并组织 [PR #60](https://github.com/N3urda/hongguoTV/pull/60) 的播放恢复发行。
+- **ermilylu**：上游纯 Kotlin Android v5 签名核心提交 [`18c37c2`](https://github.com/N3urda/hongguoTV/commit/18c37c2afd0567520135abcae312352542f09083) 及 PR #60 两个提交的公开 Git 作者。其签名实现、合成向量与真实播放验收，为本项目纯 JavaScript 移植提供了直接依据。按公开提交名署名，不推断 GitHub 账号，不展示邮箱。
+- **[@WEP-56](https://github.com/WEP-56)**：在 [Issue #162](https://github.com/jackotom/hongguo-drama/issues/162#issuecomment-6915976249) 及时贴出上游 PR 链接，帮助排查转向有效协议。
+- **[@alair-s](https://github.com/alair-s)**：提交 [#163](https://github.com/jackotom/hongguo-drama/pull/163)、[#164](https://github.com/jackotom/hongguo-drama/pull/164)，提供 v5/本地模型桥研究和恢复方案；本版采用独立纯 JavaScript 签名路径，未合并其外部 provider 或 SDK。
+
+感谢以上各位把解决问题的过程分享出来，也感谢持续提交代码、报错截图和复现细节的每一位用户。7.5 将这些贡献随源码和安装包保留，发布页另列重点致谢。上游许可、原始作者和既有历史名单全部保留；列名不冒称 PR 原样合并或伪造共同作者。
+
+7.4开放PR致谢：[@j2-cuong](https://github.com/j2-cuong)（[#159](https://github.com/jackotom/hongguo-drama/pull/159) 下载取源重试与剧集筛选）、[@aaaasssddfgh](https://github.com/aaaasssddfgh)（[#152](https://github.com/jackotom/hongguo-drama/pull/152) Windows AMD AMF编码）；[@roytjus](https://github.com/roytjus)（#92、#143）和[@xinbaojian](https://github.com/xinbaojian)（#129）继续列入。列名代表代码提交，不代表PR已原样合并。
 
 7.3本轮公开反馈致谢：[@zzm-note](https://github.com/zzm-note)（[#156](https://github.com/jackotom/hongguo-drama/issues/156) S/D倍速调节建议，采用解决方案1）。以下保留7.2历史核对快照，不将反馈者伪列为代码作者。
 
 7.2本轮公开反馈致谢：[@Zxiaoming90](https://github.com/Zxiaoming90)（#153外置盘）、[@zhangyibin8111](https://github.com/zhangyibin8111)（#150下载与删除）、[@darki2k](https://github.com/darki2k)（#151字幕建议，本轮仅核实来源，尚未实现）。以下保留7.1历史核对快照，不将反馈者伪列为代码作者。
 
-核对日期：2026-11-12。收录本轮开发期间默认分支提交快照的作者，以及冻结时全部开放／已关闭 PR、Issue 的提交账号。共核对 264 个提交、10 个 PR、137 个 Issue；本轮发行及后置文档新增提交不回填该历史快照。仅展示公开账号与提交编号，不收录邮箱等私人资料。
+核对日期：2026-11-16。收录本轮开发期间默认分支提交快照的作者，以及冻结时全部开放／已关闭 PR、Issue 的提交账号。历史快照含 264 个提交、10 个 PR、137 个 Issue；本轮回读当前列表返回的13个本仓PR，历史已核实但当前列表未返回的#140及作者继续保留；另列上游PR #60与核心作者。仅展示公开账号与提交编号，不收录邮箱等私人资料。
 
 ## 代码提交作者
 
@@ -13,12 +27,15 @@
 
 ## PR 提交者
 
-感谢 8 位提交者提供代码方案。列出 PR 不代表已经合并或原样采用；具体采用情况以代码、提交历史与审查记录为准。
+感谢 11 位提交者提供代码方案（包括当前列表未返回、但已核实的历史 PR #140）。列出 PR 不代表已经合并或原样采用；具体采用情况以代码、提交历史与审查记录为准。
 
 | 账号 | 提交的 PR |
 | --- | --- |
-| [@anupam-orbis](https://github.com/anupam-orbis) | [#140](https://github.com/jackotom/hongguo-drama/pull/140) |
+| [@aaaasssddfgh](https://github.com/aaaasssddfgh) | [#152](https://github.com/jackotom/hongguo-drama/pull/152) |
+| [@anupam-orbis](https://github.com/anupam-orbis) | [#140](https://github.com/jackotom/hongguo-drama/pull/140)（历史已核对，当前列表未返回，保留署名） |
+| [@alair-s](https://github.com/alair-s) | [#163](https://github.com/jackotom/hongguo-drama/pull/163)、[#164](https://github.com/jackotom/hongguo-drama/pull/164) |
 | [@ceco3000](https://github.com/ceco3000) | [#18](https://github.com/jackotom/hongguo-drama/pull/18) |
+| [@j2-cuong](https://github.com/j2-cuong) | [#159](https://github.com/jackotom/hongguo-drama/pull/159) |
 | [@jackotom](https://github.com/jackotom) | [#29](https://github.com/jackotom/hongguo-drama/pull/29)、[#88](https://github.com/jackotom/hongguo-drama/pull/88) |
 | [@jayeeliu](https://github.com/jayeeliu) | [#61](https://github.com/jackotom/hongguo-drama/pull/61) |
 | [@jjay5520](https://github.com/jjay5520) | [#87](https://github.com/jackotom/hongguo-drama/pull/87) |
@@ -121,6 +138,6 @@
 
 ## 署名说明
 
-完整结构化名单随源码及桌面包保存在 `src/native/community-credits.json`。既有上游、组件和算法作者的署名继续保留在 README、NOTICE、THIRD-PARTY-NOTICES.md 及相应许可文件中。
+本轮公开查询快照随源码及桌面包保存在 `src/native/community-credits.json`；当前查询未返回的历史贡献继续在本文及NOTICE保留。既有上游、组件和算法作者的署名继续保留在 README、NOTICE、THIRD-PARTY-NOTICES.md 及相应许可文件中。
 
 GitHub 仓库右侧 Contributors 由平台根据实际提交历史生成，无法通过这份名单指定。Issue 反馈者和未采用 PR 的作者在此公开致谢，不伪造提交作者、共同作者或合并记录。

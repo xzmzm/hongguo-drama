@@ -1,6 +1,6 @@
-<!-- 7.3 source and release target; TV and phone remain independent. -->
+<!-- 7.5 source and release target; TV and phone remain independent. -->
 
-7.3 为当前源码／发行目标，内部7.3.0、桌面构建7.3.1。新增可配置的 S / D 倍速调节，并加强下载文件身份、外部媒体地址、NAS 目录和 Docker 队列保护。标准发行范围是双Mac、Windows x64、Linux x64 AppImage与Docker amd64；实际状态见[7.3记录](docs/release-7.3.md)。
+7.5 为当前源码／发行目标，内部7.5.0、桌面构建7.5.1。本轮目标为成功下载后的 EPERM 临时文件清理与间歇 EMPTY 恢复；7.5尚未发布，功能与最终包验收待完成，不能宣称上游故障已全部根治。Windows真实下载验收计划使用GitHub虚拟机，不等同实体电脑。标准发行范围是双Mac、Windows x64、Linux x64 AppImage与Docker amd64；实际状态见[7.5记录](docs/release-7.5.md)。
 
 <!-- 7.2 published; frozen application source remains unchanged. -->
 

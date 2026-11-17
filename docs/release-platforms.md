@@ -1,4 +1,12 @@
-# 7.3 五平台正式发行
+# 三平台正式发行规则（2026-11-17起）
+
+后续正式Release只提供macOS Apple Silicon arm64、macOS Intel x64、Windows x64三平台附件；Linux x64 AppImage、Docker、TV APK和手机APK不再发布。每次发行页必须推荐[N3urda/hongguoTV](https://github.com/N3urda/hongguoTV)供Android手机与Android TV用户下载；该项目独立维护，不计入本项目附件或平台验收。完整门槛见[RELEASING.md](RELEASING.md)。
+
+# 7.4 五平台发行目标（历史）
+
+7.4为当前源码／发行目标，内部7.4.0、桌面构建7.4.1。修复下载临时文件身份误判与匿名注册超时后的批量失败，增加按剧筛选和 Windows AMD AMF 硬件编码。双Mac、Windows x64、Linux x64 AppImage、Docker amd64须同源齐备并通过必要验收后一次公开；实际状态见[7.4记录](release-7.4.md)。
+
+# 7.3 五平台正式发行（历史）
 
 7.3已于2026-11-15 12:16:01（Asia/Shanghai）正式公开并设Latest，内部7.3.0、桌面构建7.3.1，冻结源码`782fb21cbddf1be46f88e97af5e788c99e30beae`。双Mac、Windows x64、Linux x64 AppImage、Docker amd64五类共25份正式附件，远端大小／SHA256、两份更新清单、总校验及匿名入口核对通过；双Mac本轮四份公证Accepted、签名和装订，Windows EXE未签名，Intel仅Rosetta。未替换本机正式安装；TV和手机独立。完整回执见[7.3记录](release-7.3.md)。
 
