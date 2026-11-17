@@ -1,4 +1,8 @@
 {
+  "USB 手机签名": "USB phone signing",
+  "默认关闭。需要 USB 连接已授权调试且已安装签名服务的手机；开启后用于在线播放和下载取源，手机断开时无法签名。保存后生效。": "Off by default. Requires a USB-connected phone with debugging authorized and the signing service installed. Used for playback and download source requests when enabled; signing is unavailable when the phone is disconnected. Takes effect after saving.",
+  "USB 手机签名不可用，请连接已授权的手机并确认签名服务已安装；也可在设置中关闭 USB 手机签名": "USB phone signing is unavailable. Connect an authorized phone with the signing service installed, or turn off USB phone signing in Settings.",
+  "USB 手机签名设置必须为开关值": "USB phone signing must be on or off.",
   "窗口全屏": "Window fullscreen",
   "退出窗口全屏": "Exit window fullscreen",
   "退出窗口全屏（Esc）": "Exit window fullscreen (Esc)",

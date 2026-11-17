@@ -160,7 +160,7 @@ function SettingsPage({ active = true, preview = false, appInfo = null, wakeRegi
     setSaveError('');
     try {
       // Submit only edited fields; the main process merges newer playback options.
-      const editable = ['root', 'name_format', 'download_quality', 'download_metadata', 'cache_next_episode', 'compat_mode', 'auto_delete_watched', 'show_danmaku_controls', 'max_concurrent', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'fast_cdn_host', 'app_updates_enabled'];
+      const editable = ['root', 'name_format', 'download_quality', 'download_metadata', 'cache_next_episode', 'compat_mode', 'auto_delete_watched', 'show_danmaku_controls', 'max_concurrent', 'proxy_enabled', 'proxy_mode', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password', 'watch_updates_enabled', 'watch_sequels_enabled', 'watch_notifications_enabled', 'search_app_enabled', 'fast_cdn_host', 'usb_signer', 'app_updates_enabled'];
       const submitted = {};
       for (const key of editable) {
         if (Object.hasOwn(next, key) && (editedKeys.current.has(key) || isProxy && key.startsWith('proxy_'))) submitted[key] = next[key];
@@ -297,6 +297,7 @@ function SettingsPage({ active = true, preview = false, appInfo = null, wakeRegi
           <label className="proxy-switch-row"><input type="checkbox" checked={settings.auto_delete_watched === true} onChange={event => update('auto_delete_watched', event.target.checked)} /><span className="proxy-switch-text">{t("看完自动删除")}<em>{t("看完一集后删除该集已下载的视频、在线播放缓存和转码缓存。下载文件会永久删除；需要时可重新下载。保存后生效。")}</em></span></label>
           <label className="proxy-switch-row"><input type="checkbox" aria-label={t("优先使用红果 App 搜索")} checked={settings.search_app_enabled === true} onChange={event => update('search_app_enabled', event.target.checked)} /><span className="proxy-switch-text">{t("优先使用红果 App 搜索")}<em>{t("失败或空结果自动回退官网；关闭此项时，官网不可用仍会尝试 App 备用搜索。")}</em></span></label>
           <label className="proxy-switch-row"><input type="checkbox" aria-label={t("海外视频加速线路")} checked={settings.fast_cdn_host === true} onChange={event => update('fast_cdn_host', event.target.checked)} /><span className="proxy-switch-text">{t("海外视频加速线路")}<em>{t("在线播放和下载优先改用官方 App 的视频线路（fqnovelvod.com），在海外通常明显更快；失败时自动回退原地址。保存后生效。")}</em></span></label>
+          {window.electronAPI.platform !== 'android' && <label className="proxy-switch-row"><input type="checkbox" aria-label={t("USB 手机签名")} checked={settings.usb_signer === true} onChange={event => update('usb_signer', event.target.checked)} /><span className="proxy-switch-text">{t("USB 手机签名")}<em>{t("默认关闭。需要 USB 连接已授权调试且已安装签名服务的手机；开启后用于在线播放和下载取源，手机断开时无法签名。保存后生效。")}</em></span></label>}
         </div>
         <div className="settings-group">
           <span className="settings-label">{t("弹幕按钮设置")}</span>

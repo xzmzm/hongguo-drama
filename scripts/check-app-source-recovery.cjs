@@ -21,6 +21,7 @@ function load(axios, { realDevice = false, getPlaybackDevice, registerPlaybackDe
       if (name === './request-signal') return require('../src/native/request-signal');
       if (name === './playback-v5') return require('../src/native/playback-v5');
       if (name === './playback-signature') return require('../src/native/playback-signature');
+      if (name === './usb-signer') return require('../src/native/usb-signer');
       if (name === './playback-device') return getPlaybackDevice || registerPlaybackDevice ? {
         getPlaybackDevice: getPlaybackDevice || (async () => ({ device_id: '1000000000000001', iid: '1000000000000002', cdid: 'fixture' })),
         registerPlaybackDevice: registerPlaybackDevice || (async () => ({ device_id: '1000000000000001', iid: '1000000000000002', cdid: 'fixture' })),

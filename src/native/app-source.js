@@ -12,6 +12,7 @@ const { setTimeout: delay } = require('node:timers/promises');
 const { registerPlaybackDevice } = require('./playback-device');
 const { signPlayer } = require('./playback-signature');
 const { signPlaybackV5 } = require('./playback-v5');
+const { prepareUsbSigner, signPlaybackRequest, usbSignerEnabled } = require('./usb-signer');
 const { abortError, throwIfAborted, boundedSignal, networkFailure } = require('./request-signal');
 const sm3 = require('./sm3');
 const { normalizeDownloadQuality, meetsDownloadQuality } = require('./download-quality');
@@ -22,6 +23,7 @@ let playbackQueue = Promise.resolve();
 let playbackReadyAt = 0;
 let playbackRejection = null;
 const VIDEO_API = 'https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/';
+const VIDEO_TAB_API = 'https://api5-normal-sinfonlineb.fqnovel.com/reading/bookapi/video_tab/multi_video_model/v1/';
 const PLAYER_API = 'https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/player/v1';
 const SEARCH_API = 'https://api5-normal-sinfonlinea.fqnovel.com/reading/bookapi/search/tab/v';
 const VIDEO_UA = 'com.phoenix.read/71332 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)';
@@ -176,6 +178,32 @@ function playbackRequest(payload, identity, videoId = '', alternate = false) {
     Object.assign(headers, { 'Content-Type': 'application/json; charset=UTF-8',
         'Content-Encoding': 'gzip', 'x-ss-stub': signature['x-ss-stub'] });
     return { url, body, headers, method: 'POST' };
+}
+
+// Optional USB phone signing signs only the older request family; used solely when enabled.
+function usbPlaybackRequest(payload, identity, videoId = '') {
+    // Sign the final query and actual gzip body; other API families retain their original signer.
+    const body = videoId ? null : gzipSync(Buffer.from(payload));
+    const requestTicket = Date.now(), khronos = Math.floor(requestTicket / 1000);
+    const device = { ...(videoId ? VIDEO_TAB_DEVICE : PLAYBACK_DEVICE), ...identity };
+    const values = videoId ? { video_id: videoId, video_id_type: '0', device_level: '1',
+        need_all_video_definition: '1', need_mp4_align: '0', use_os_player: '0',
+        video_platform: '1024', source: '0', from_video_id: '' } : {};
+    const query = pythonUrlEncode({ ...device, ...values, ts: String(khronos), _rticket: String(requestTicket) });
+    const url = `${videoId ? VIDEO_TAB_API : VIDEO_API}?${query}`;
+    const signature = signPlayer({ query, body, ts: khronos });
+    const headers = {
+        'User-Agent': VIDEO_UA.replace(DEVICE.version_code, device.version_code), Accept: 'application/json; charset=utf-8,application/x-protobuf',
+        'x-ss-req-ticket': signature['x-ss-req-ticket'], 'sdk-version': '2', 'x-xs-from-web': '0',
+        'passport-sdk-version': videoId ? '50561' : '5051452', 'x-ss-dp': String(device.aid),
+        'x-khronos': signature['x-khronos'],
+        'x-ladon': signature['x-ladon'], 'x-argus': signature['x-argus'], 'x-tt-dt': '',
+        'x-tt-store-region': 'cn', 'x-tt-store-region-src': 'did',
+    };
+    if (body) Object.assign(headers, { 'Content-Type': 'application/json; charset=UTF-8',
+        'Content-Encoding': 'gzip', 'x-ss-stub': signature['x-ss-stub'] });
+    else headers['x-tt-request-tag'] = 't=0;n=0';
+    return { url, body, headers, method: videoId ? 'GET' : 'POST' };
 }
 
 function parseSearchInteger(value) {
@@ -431,6 +459,10 @@ async function fetchAppPlayUrlFresh(vid, options) {
         mixed_video_id_map: { '1004': [vid] },
         dr_scene: 'player',
     });
+    const usbPayload = JSON.stringify({
+        biz_param: { detail_page_version: 0, device_level: 3, disable_digg_stat: false, need_all_video_definition: true, need_mp4_align: false, use_os_player: false, use_server_dns: false, video_platform: 1024 },
+        mixed_video_id_map: { '1004': [vid] },
+    });
     // Playback identities can be single-use; search/account retain their shared device.
     let identity = await registerPlaybackDevice(requestJson, { signal: options.signal });
     throwIfAborted(options.signal);
@@ -443,14 +475,19 @@ async function fetchAppPlayUrlFresh(vid, options) {
         for (let attempt = 0; attempt < 2; attempt++) {
             throwIfAborted(signal);
             // Prefer the current API; only an empty response enables one legacy attempt.
-            const signed = playbackRequest(payload, identity, attempt ? '' : vid);
+            let signed;
+            if (usbSignerEnabled()) {
+                await prepareUsbSigner({ signal, deadline });
+                throwIfAborted(signal);
+                signed = await signPlaybackRequest(usbPlaybackRequest(usbPayload, identity, attempt ? '' : vid), identity, { signal, deadline });
+            } else signed = playbackRequest(payload, identity, attempt ? '' : vid);
             if (attempt) signed.headers.Connection = 'close';
             try {
                 try {
                     response = await requestJson(signed.url, { method: signed.method, headers: signed.headers, data: signed.body }, deadline, signal);
                 } catch (error) {
                     throwIfAborted(signal);
-                    if (attempt || error.code !== 'EMPTY_RESPONSE' || deadline - Date.now() < 1000) throw error;
+                    if (attempt || usbSignerEnabled() || error.code !== 'EMPTY_RESPONSE' || deadline - Date.now() < 1000) throw error;
                     // An empty primary response can recover on the other official host with the same identity.
                     const alternate = playbackRequest(payload, identity, vid, true);
                     response = await requestJson(alternate.url, { method: alternate.method, headers: alternate.headers, data: alternate.body }, deadline, signal);
