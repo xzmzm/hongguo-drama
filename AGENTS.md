@@ -14,6 +14,12 @@
   > **Android手机APK／Android TV版：** 请前往 [N3urda/hongguoTV](https://github.com/N3urda/hongguoTV) 下载。该项目独立维护；版本、兼容性与测试状态以该项目发布页为准，不计入本项目的四平台附件或验收。
 - 历史Docker、TV和手机发行包及记录保留，不补发、不改写；平台门槛见 `docs/RELEASING.md`。
 
+## 7.6 正式发行（2026-11-18）
+
+- 公开7.6、内部7.6.0；双Mac、Windows x64、Linux x64 AppImage同源一次发行，不附Docker、TV或手机。
+- 7.6已于2026-11-18 18:17:30（Asia/Shanghai）公开并设Latest，冻结源码`6a3df3b0b03e8a63589a73e375e9058f181930e8`，23份附件及匿名下载入口已核对；最终回执见`docs/release-7.6.md`。
+- 不沿用7.5构建、签名、公证或平台验收。
+
 ## 视频测试素材与声音
 
 - 用户于 2026-10-29 明确要求：测试视频须在红果短剧中随机选择并真实下载；禁止使用彩条视频测试。

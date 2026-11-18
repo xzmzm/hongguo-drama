@@ -458,9 +458,10 @@ public class MainActivity extends Activity {
     }
     private byte[] read(HttpURLConnection c, int limit, IntConsumer progress) throws IOException {
         requireBusinessOpen();
-        if (c.getContentLengthLong() > limit) throw new IOException("文件超过本机处理上限");
+        long declared = c.getContentLengthLong();
+        if (declared > limit) throw new IOException("文件超过本机处理上限");
         try (InputStream raw = trackResource(c.getInputStream()); InputStream in = "gzip".equalsIgnoreCase(c.getContentEncoding()) ? new GZIPInputStream(raw) : raw;
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+             ByteArrayOutputStream out = new ByteArrayOutputStream(declared > 0 ? (int)Math.min(declared, limit) : 32768)) {
             byte[] buf = new byte[32768]; int n, total = 0; long reported = 0;
             while ((n = in.read(buf)) != -1) {
                 requireBusinessOpen();
@@ -558,11 +559,16 @@ public class MainActivity extends Activity {
             FutureTask<Boolean> task = new FutureTask<>(() -> {
                 if (closed) return false;
                 if (isInPictureInPictureMode()) return false;
-                if (!getPackageManager().hasSystemFeature("android.software.picture_in_picture")) return false;
+                if (!getPackageManager().hasSystemFeature("android.software.picture_in_picture")) {
+                    android.util.Log.i("HongguoPlayback","HG:pip:unsupported");
+                    return false;
+                }
                 int w = Math.max(1,Math.min(8192,width)), h = Math.max(1,Math.min(8192,height));
                 float ratio = (float)w / h;
                 Rational aspect = ratio < 0.42f ? new Rational(9,21) : ratio > 2.38f ? new Rational(21,9) : new Rational(w,h);
-                return enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(aspect).build());
+                boolean entered = enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(aspect).build());
+                android.util.Log.i("HongguoPlayback","HG:pip:" + (entered ? "entered" : "rejected") + ":" + w + "x" + h + ":fullscreen=" + (fullscreen != null ? 1 : 0));
+                return entered;
             });
             runOnUiThread(task);
             try { return task.get(2,TimeUnit.SECONDS); } catch (Exception error) { return false; }
