@@ -25,6 +25,19 @@
 - 用户要求运行应用时，使用用户平时使用的用户资料目录，沿用已保存的语言、账号和设置。
 - 仅在执行测试时使用全新的独立用户资料目录。
 
+## 7.7 播放取源正式发行（2026-11-20）
+
+- 内部7.7.0、桌面构建7.7.1；双Mac、Windows x64、Linux x64 AppImage同源一次发行，不附Docker、TV或手机。
+- `video_tab`恢复改用 player 签名族的无正文 V5 GET；保留身份、分集、画质、地址、加密和备用片源校验。
+- 7.7已于2026-11-20 15:08:15（Asia/Shanghai）正式公开并设Latest，冻结源码`92df757ed7be8ea658ee274a6a429b77f49e54e8`，23份附件及匿名入口已核对；双Mac新签名、公证、装订，Windows GitHub虚拟机与Linux原生实测通过。
+
+## 后续发行依赖审计（2026-11-18记录）
+
+- 7.6的`npm audit`报告17个受影响包节点（7 moderate、10 high），均在开发、测试或构建工具链；`npm audit --omit=dev`为0，不为这些告警单独热修7.6。
+- 下次发行前重新运行`npm audit`；先运行不带`--force`的`npm audit fix`，再逐项评估剩余Vite、Electron Builder等升级并重新构建、验证四平台产物。
+- 不直接运行`npm audit fix --force`：当前锁文件会被评估为将`electron-builder`从26.15.3降到24.13.3，并把Vite升到8、esbuild升到0.28，存在peer冲突和构建回归风险。
+- 不为`src/localLibrary.js`的Node模块警告在根`package.json`添加`"type": "module"`；主进程、preload和native代码仍为CommonJS。若要消除测试警告，另行按`.mjs`路径改名并跑相关测试。
+
 ## 视频测试素材与声音
 
 - 用户于 2026-10-29 明确要求：测试视频须在红果短剧中随机选择并真实下载；禁止使用彩条视频测试。
