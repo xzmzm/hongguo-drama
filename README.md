@@ -24,25 +24,41 @@
 
 ## 下载与安装
 
-**当前正式版：7.9**（内部`7.9.0`，桌面构建`7.9.1`）；**源码／发行目标：8.0**（内部`8.0.0`，桌面构建`8.0.1`）。8.0 修复 App 播放接口空响应导致无法在线播放、下载失败，并把弹幕表情代码显示为彩色表情图片。
+**当前正式版：8.1**（内部`8.1.0`，桌面构建`8.1.1`）。本轮恢复后续分集的完整 1080P 取源，并把下载取源改为 SDK 优先、有限并行，减少批量下载前长时间停在 0% 的问题。
 
-8.0 统一发行双 Mac、Windows x64 与 Linux x64 AppImage；四平台新包、必要验收、精确源码和摘要齐备后公开并设 Latest。目标与待验项见[8.0记录](docs/release-8.0.md)。7.9 仍是发布时点的 Latest，23份正式附件与摘要见[7.9记录](docs/release-7.9.md)。
+8.1 已完成 macOS arm64／x64 SDK 执行文件、有限并行和首次缓存锁：真实批量取源从约23秒降到约2～3秒，随后继续完成媒体下载。双 Mac 原生支持该 SDK 路径；Windows x64 和 Linux x64 保留完整回退，但本轮不提供对应架构的 SDK 执行文件。
 
-| 平台 | 7.9正式附件 | 验收状态 |
+8.1 已于2026-11-23 21:33:46（Asia/Shanghai）公开并设 Latest；双 Mac、Windows x64 与 Linux x64 AppImage 共23份正式附件，远端大小／SHA256和 Latest 入口均已核对。实际状态见[8.1记录](docs/release-8.1.md)。
+
+| 平台 | 8.1正式附件 | 验收状态 |
 |---|---|---|
-| Apple芯片Mac，macOS 13+ | [DMG](https://github.com/jackotom/hongguo-drama/releases/download/v7.9/Hongguo-7.9-mac-arm64.dmg) | 已签名、公证、装订；最终包两集静音播放通过 |
-| Intel Mac，macOS 13+ | [DMG](https://github.com/jackotom/hongguo-drama/releases/download/v7.9/Hongguo-7.9-mac-x64.dmg) | 已签名、公证、装订；Rosetta启动通过，实体Intel未验 |
-| Windows x64 | [安装版](https://github.com/jackotom/hongguo-drama/releases/download/v7.9/hongguo-downloader-7.9-win-x64-setup.exe) · [便携EXE](https://github.com/jackotom/hongguo-drama/releases/download/v7.9/hongguo-downloader-7.9-win-x64.exe) · [便携ZIP](https://github.com/jackotom/hongguo-drama/releases/download/v7.9/hongguo-downloader-7.9-win-x64.zip) | EXE未签名；真实下载、播放及安装升级在GitHub Windows虚拟机通过 |
-| Linux x64 | [AppImage](https://github.com/jackotom/hongguo-drama/releases/download/v7.9/hongguo-downloader-7.9-linux-x64.AppImage) | 赋予执行权限后运行；两集真实静音播放通过 |
+| Apple芯片Mac，macOS 13+ | [DMG](https://github.com/jackotom/hongguo-drama/releases/download/v8.1/Hongguo-8.1-mac-arm64.dmg) | SDK后续集完整片源、下载提速和静音播放验收 |
+| Intel Mac，macOS 13+ | [DMG](https://github.com/jackotom/hongguo-drama/releases/download/v8.1/Hongguo-8.1-mac-x64.dmg) | x64 SDK执行文件已构建；Rosetta验收，实体Intel未验 |
+| Windows x64 | [安装版](https://github.com/jackotom/hongguo-drama/releases/download/v8.1/hongguo-downloader-8.1-win-x64-setup.exe) · [便携EXE](https://github.com/jackotom/hongguo-drama/releases/download/v8.1/hongguo-downloader-8.1-win-x64.exe) · [便携ZIP](https://github.com/jackotom/hongguo-drama/releases/download/v8.1/hongguo-downloader-8.1-win-x64.zip) | EXE未签名；保留回退，未提供SDK执行文件 |
+| Linux x64 | [AppImage](https://github.com/jackotom/hongguo-drama/releases/download/v8.1/hongguo-downloader-8.1-linux-x64.AppImage) | 保留回退，未提供SDK执行文件；继续做启动与媒体检查 |
 
-[7.9发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v7.9) · [SHA256](https://github.com/jackotom/hongguo-drama/releases/download/v7.9/SHA256SUMS.txt) · [精确源码](https://github.com/jackotom/hongguo-drama/releases/download/v7.9/hongguo-drama-7.9-source.zip)。实际状态见[7.9记录](docs/release-7.9.md)。上游部分网页片源仍可能404、只提供预览或超时，不保证所有内容永久可播。
+[8.1发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v8.1) · [SHA256](https://github.com/jackotom/hongguo-drama/releases/download/v8.1/SHA256SUMS.txt) · [精确源码](https://github.com/jackotom/hongguo-drama/releases/download/v8.1/hongguo-drama-8.1-source.zip)。上游部分网页片源仍可能404、仅预览、空响应或CDN超时，不保证所有内容永久可播。
 
 **Android手机APK／Android TV版：** 请前往 [N3urda/hongguoTV](https://github.com/N3urda/hongguoTV) 下载。该项目独立维护；版本、兼容性与测试状态以该项目发布页为准，不计入本项目的四平台附件或验收。
 
 <details>
+<summary>8.0 历史下载与发行说明</summary>
+
+8.0历史发行包与验收回执见[8.0发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v8.0)及[8.0记录](docs/release-8.0.md)；历史签名、公证和平台验收不替代8.1结果。
+
+</details>
+
+<details>
+<summary>7.9 历史下载与发行说明</summary>
+
+7.9历史发行包与验收回执见[7.9发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v7.9)及[7.9记录](docs/release-7.9.md)；历史签名、公证和平台验收不替代8.0结果。
+
+</details>
+
+<details>
 <summary>7.8 历史下载与发行说明</summary>
 
-7.8历史发行包与验收回执见[7.8发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v7.8)及[7.8记录](docs/release-7.8.md)；历史签名、公证和平台验收不替代7.9结果。
+7.8历史发行包与验收回执见[7.8发行页](https://github.com/jackotom/hongguo-drama/releases/tag/v7.8)及[7.8记录](docs/release-7.8.md)；历史签名、公证和平台验收不替代8.0结果。
 
 </details>
 
@@ -259,7 +275,23 @@ Mac和Windows安装版保留应用内更新入口；完整6.4→6.5自动更新�
 3. 打开详情点「立即播放」，也可选择集数与清晰度加入下载队列。
 4. 下次从「我的剧库」或「观看记录」接着看；下载进度、失败重试和整剧合并在「下载管理」。
 
-## 7.9（正式发布）
+## 8.1（正式发布）
+
+- 数字分集下载统一改为 SDK 优先；在线播放仍保留原 FIFO、身份轮换和 403/429 拒绝保护。
+- SDK 子进程最多同时运行 3 个；取消中的排队请求立即退出，在线播放和批量下载不再互相长时间占用。
+- 首次初始化先锁定匿名设备和固定 SDK 素材，避免并发下载抢写身份缓存。
+- #179 后续集不再只依赖公开 360P：Apple Silicon 与 Intel SDK 路径均能取得 1080P HEVC 模型。
+- 四平台附件、远端摘要与最终验收见[8.1记录](docs/release-8.1.md)。
+
+## 8.0（历史正式版）
+
+- App主接口、备用主机、单集模型、`video_tab`和旧接口全部返回空响应时，复用同一匿名身份完成有界探测，并改用官网播放器的完整公开兜底片源。
+- 自动在线播放和允许降级的下载可使用完整360P兜底；固定在线画质仍不会静默降级，下载管理会显示实际质量。
+- 匿名设备注册继续复用身份，并在最后一组消费者取消时关闭socket。
+- 弹幕中的`[笑哭]`、`[捂脸]`、`[爱慕]`、`[没看够]`等代码显示为彩色表情图片；未知代码保留原文。
+- 修复#179和#178；四平台23份附件、远端SHA256与Latest入口已核对。详见[8.0记录](docs/release-8.0.md)。
+
+## 7.9（历史正式版）
 
 - 发现页先读取内存角标，只对当前可见卡片逐部异步预热；首屏不再为每部剧拉取完整分集。
 - 剧集面板先批量拿轻量进度，再按剧异步补齐；分集列表改为异步扫描和异步签发本地播放地址。
