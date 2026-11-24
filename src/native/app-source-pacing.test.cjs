@@ -3,11 +3,12 @@ const { test } = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { gunzipSync } = require('node:zlib');
 const { deferred, turn } = require('./hongguo-cancellation-fixture.cjs');
 
 function fixture(reply, registrationError, sdkReply) {
     let now = 1800000000000;
-    const calls = [], registrations = [], timers = [], module = { exports: {} };
+    const calls = [], registrations = [], sdkCalls = [], timers = [], module = { exports: {} };
     function later(fn, ms) { const timer = { fn, at: now + ms, cleared: false }; timers.push(timer); return timer; }
     const clear = timer => { if (timer) timer.cleared = true; };
     vm.runInNewContext(fs.readFileSync(require.resolve('./app-source'), 'utf8'), {
@@ -31,12 +32,15 @@ function fixture(reply, registrationError, sdkReply) {
                 return reply ? reply(config, calls.length) : success(config);
             };
             if (name === './sdk-playback') return {
-                resolveSdkPlayback: sdkReply || (async () => null),
+                resolveSdkPlayback: (vid, options) => {
+                    sdkCalls.push({ vid, at: now });
+                    return sdkReply ? sdkReply(vid, options) : null;
+                },
             };
             return require(name.startsWith('.') ? path.join(__dirname, name) : name);
         },
     });
-    return { calls, registrations, fetch: (vid = '11', options) => module.exports.fetchAppPlayUrl(vid, options),
+    return { calls, registrations, sdkCalls, fetch: (vid = '11', options) => module.exports.fetchAppPlayUrl(vid, options),
         async advance(ms) {
             now += ms;
             for (let idle = 0, rounds = 0; rounds < 50; rounds++) {
@@ -75,7 +79,25 @@ function sdkSuccess(name) {
     };
 }
 
-test('SDK-first downloads resolve in parallel without consuming playback pacing', async () => {
+test('Parallel SDK-first downloads resolve without consuming playback pacing', async () => {
+    const held = [deferred(), deferred()], vids = [];
+    const f = fixture(undefined, undefined, vid => {
+        vids.push(vid);
+        return held[vids.length - 1].promise;
+    });
+    const first = f.fetch('11', { preferSdk: true, parallelSdk: true });
+    const second = f.fetch('12', { preferSdk: true, parallelSdk: true });
+    await turn();
+    assert.deepEqual(vids, ['11', '12']);
+    assert.equal(f.calls.length, 0, 'SDK-first downloads must skip empty official routes');
+    assert.equal(f.registrations.length, 0, 'SDK-first downloads must not spend the anonymous App identity');
+    held[0].resolve(sdkSuccess('first'));
+    held[1].resolve(sdkSuccess('second'));
+    assert.deepEqual([(await first).url, (await first).sourceProvider], ['https://qznovelvod.com/first.mp4', 'sdk']);
+    assert.deepEqual([(await second).url, (await second).sourceProvider], ['https://qznovelvod.com/second.mp4', 'sdk']);
+});
+
+test('Online SDK-first playback waits for a FIFO slot and one-second pacing', async () => {
     const held = [deferred(), deferred()], vids = [];
     const f = fixture(undefined, undefined, vid => {
         vids.push(vid);
@@ -84,13 +106,71 @@ test('SDK-first downloads resolve in parallel without consuming playback pacing'
     const first = f.fetch('11', { preferSdk: true });
     const second = f.fetch('12', { preferSdk: true });
     await turn();
-    assert.deepEqual(vids, ['11', '12']);
-    assert.equal(f.calls.length, 0, 'SDK-first downloads must skip empty official routes');
-    assert.equal(f.registrations.length, 0, 'SDK-first downloads must not spend the anonymous App identity');
+    assert.deepEqual(f.sdkCalls.map(call => call.vid), ['11']);
+    assert.equal(f.calls.length, 0, 'online SDK-first must not run in parallel');
     held[0].resolve(sdkSuccess('first'));
-    held[1].resolve(sdkSuccess('second'));
     assert.equal((await first).url, 'https://qznovelvod.com/first.mp4');
+    await f.advance(999); await turn();
+    assert.deepEqual(f.sdkCalls.map(call => call.vid), ['11']);
+    await f.advance(1); await turn();
+    assert.deepEqual(f.sdkCalls.map(call => call.vid), ['11', '12']);
+    assert.equal(f.sdkCalls[1].at - f.sdkCalls[0].at, 1000);
+    held[1].resolve(sdkSuccess('second'));
     assert.equal((await second).url, 'https://qznovelvod.com/second.mp4');
+});
+
+test('content type 1001 is sent and parsed through the 1001 model bucket', async () => {
+    let payload;
+    const f = fixture(config => {
+        if (config.method === 'GET') return { status: 200, headers: {}, data: '' };
+        payload = gunzipSync(config.data).toString('utf8');
+        const model = sdkSuccess('creator').model;
+        return { status: 200, headers: {}, data: JSON.stringify({ code: 0, data: { 1001: { 11: { video_model: model } } } }) };
+    });
+    const pending = f.fetch('11', { contentType: '1001' });
+    await turn(); await f.advance(250);
+    const result = await pending;
+    assert.equal(result.url, 'https://qznovelvod.com/creator.mp4');
+    assert.match(payload, /"mixed_video_id_map":\{"1001":\["11"\]\}/);
+});
+
+test('V8 official route is attempted before SDK fallback for downloads', async () => {
+    const f = fixture(() => ({ status: 200, headers: {}, data: '{"code":12345}' }), undefined,
+        async () => sdkSuccess('recovered'));
+    const result = await f.fetch('11');
+    assert.equal(result.url, 'https://qznovelvod.com/recovered.mp4');
+    assert.equal(result.source, 'app');
+    assert.equal(result.sourceProvider, 'sdk');
+    assert.equal(f.calls.length, 1);
+    assert.deepEqual(f.sdkCalls.map(call => call.vid), ['11']);
+});
+
+test('SDK unavailable under preferSdk still falls back to the official route', async () => {
+    const f = fixture(undefined, undefined, async (_vid, options) => {
+        options.onError({ code: 'SDK_UNAVAILABLE', message: '当前平台未启用后续集 SDK' });
+        return null;
+    });
+    const result = await f.fetch('11', { preferSdk: true });
+    assert.equal(result.url, 'https://qznovelvod.com/fixture.mp4');
+    assert.equal(result.source, 'app');
+    assert.equal(result.sourceProvider, 'official');
+    assert.equal(result.sdkFailure.code, 'SDK_UNAVAILABLE');
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.registrations.length, 1);
+});
+
+test('SDK failure detail remains attached when App playback also fails', async () => {
+    const f = fixture(() => ({ status: 200, headers: {}, data: '{"code":12345}' }), undefined,
+        async (_vid, options) => {
+            options.onError({ code: 'SDK_UNAVAILABLE', message: '当前平台未启用后续集 SDK' });
+            return null;
+        });
+    await assert.rejects(f.fetch('11'), error => {
+        assert.equal(error.code, 'BUSINESS_REJECTED');
+        assert.equal(error.sdkFailure.code, 'SDK_UNAVAILABLE');
+        assert.match(error.sdkFailure.message, /当前平台/);
+        return true;
+    });
 });
 
 test('concurrent playback and prefetch register and request serially with a one-second gap', async () => {
@@ -137,6 +217,8 @@ test('empty current routes rotate identity once and stop', async () => {
     assert.equal(settled.error.code, 'EMPTY_RESPONSE');
     assert.equal(f.registrations.length, 2, 'one empty-result identity rotation is bounded');
     const round = [
+        '/novel/player/multi_video_model/preload/v1',
+        '/novel/player/multi_video_model/preload/v1',
         '/reading/bookapi/video_tab/multi_video_model/v1/',
         '/reading/bookapi/video_tab/multi_video_model/v1/',
         '/novel/player/multi_video_model/player/v1',

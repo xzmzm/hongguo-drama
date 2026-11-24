@@ -1,4 +1,4 @@
-# 红果短剧 8.0 源码候选：公开源码排除依赖、构建产物与本地运行资料。
+# 红果短剧 8.2 源码／发行目标：公开源码排除依赖、构建产物与本地运行资料。
 /*-small.png
 
 # 依赖
@@ -17,6 +17,7 @@ build/ffmpeg/*
 !build/ffmpeg/LICENSE.md
 !build/ffmpeg/LIBREMPEG-*
 build/sdk-playback/*
+build/sdk-playback-work/
 !build/sdk-playback/README.txt
 build/hongguo-sdk-playback/
 /hongguo-sdk-playback.spec

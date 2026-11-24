@@ -9,7 +9,7 @@ const { EventEmitter } = require('node:events');
 const { createRequire } = require('node:module');
 const source = path.resolve(__dirname, '../main.js'), req = createRequire(source);
 
-function load(searchHongguo) {
+function load(searchHongguo, searchApp = async () => { throw Object.assign(new Error('fixture App search unavailable'), { code: 'APP_EMPTY' }); }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hongguo-search-ipc-'));
   const handlers = {}, app = new EventEmitter();
   Object.assign(app, {
@@ -24,7 +24,7 @@ function load(searchHongguo) {
     electron,
     './src/store': { getSettings: () => ({}) },
     './src/native/hongguo-search': { searchHongguo },
-    './src/native/hongguo-app-search': { searchApp: async () => { throw Object.assign(new Error('fixture App search unavailable'), { code: 'APP_EMPTY' }); } },
+    './src/native/hongguo-app-search': { searchApp },
     './src/native/hongguo-app-new': { searchNewReleasesDetailed: async () => ({ results: [], partial: false }) },
     './src/native/hongguo': { fetchEpisodeList: async () => ({ episodes: [] }) },
   };
@@ -120,6 +120,43 @@ function failure(message, kind, fallback) {
   });
   await harness.handlers['search-series']({}, '测试剧第三季', { source: 'hongguo' });
   assert.deepEqual(exactCalls, ['测试剧第三季'], 'a title match must not trigger an extra search');
+  harness.cleanup();
+
+  const appSupplementCalls = [];
+  harness = load(async () => ({
+    results: [{ series_id: '5555555', series_title: '同题材无关剧' }], total: 1, page: 1, totalPages: 1, hasMore: false,
+  }), async keyword => {
+    appSupplementCalls.push(keyword);
+    return {
+      results: [{ series_id: '6666666', series_title: '最后生还的猫第二季', cover: '', episode_count: 20 }],
+      hasMore: false,
+    };
+  });
+  result = await harness.handlers['search-series']({}, '最后生还的猫', { source: 'hongguo' });
+  assert.deepEqual(appSupplementCalls, ['最后生还的猫'], 'a missing exact website match must try App search even when App-first is off');
+  assert.deepEqual(new Set(result.results.map(item => item.series_id)), new Set(['5555555', '6666666']));
+  assert.equal(result.meta.appSupplement, 1);
+  harness.cleanup();
+
+  const budgetAppCalls = [];
+  harness = load(async () => ({
+    results: [{ series_id: '7777777', series_title: '同题材无关剧' }], total: 1, page: 1, totalPages: 1, hasMore: false,
+  }), async (keyword, options = {}) => {
+    if (options.deadline <= Date.now()) throw Object.assign(new Error('App 搜索超时'), { code: 'APP_TIMEOUT' });
+    budgetAppCalls.push(keyword);
+    return {
+      results: [{ series_id: '8888888', series_title: '预算恢复后命中的剧', cover: '', episode_count: 0 }],
+      hasMore: false,
+    };
+  });
+  await harness.context.searchAtSourcePage('预算恢复后命中的剧', {
+    source: 'hongguo', page: 1, fuzzy: true, deadline: Date.now() - 1,
+  });
+  assert.deepEqual(budgetAppCalls, [], 'an expired budget must not start or cool down App search');
+  await harness.context.searchAtSourcePage('预算恢复后命中的剧', {
+    source: 'hongguo', page: 1, fuzzy: true, deadline: Date.now() + 8000,
+  });
+  assert.deepEqual(budgetAppCalls, ['预算恢复后命中的剧'], 'a later search must still reach App fallback');
   harness.cleanup();
 
   harness = load(async keyword => {

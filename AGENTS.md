@@ -1,5 +1,18 @@
 # 红果短剧项目规则
 
+## 发布正常可用性硬门禁（2026-11-24）
+
+- 以后任何更新在上传 GitHub 前，必须先用最终包按用户正常入口实测“能打开发并正常使用”；不能只用构建成功、签名、公证、特殊参数启动或局部窗口检查代替。
+- macOS 必须从最终 DMG／App 普通双击或 LaunchServices 启动，不得依赖 `--js-flags`、`--user-data-dir` 等测试专用参数；Windows 必须有真实下载与播放，Linux 必须有最终 AppImage 启动与播放。
+- 2026-11-24 的 8.2 首个公开 Mac 包因 Electron 44.9.1 在当前 macOS 的 V8 CodeRange 初始化崩溃，普通启动即 `EXC_BREAKPOINT`。该 Release 已撤回为 Draft，Latest 恢复 8.1；最终包必须同时给 Electron 主程序、Renderer/GPU Helper 和 SDK helper 配置 JIT 所需 entitlements，再普通启动验证。
+
+## 8.2 V8 优先与 SDK 兜底正式发行（2026-11-24）
+
+- 从公开 8.1 增加 0.1 至 8.2，内部 8.2.0、桌面构建 8.2.1，运行代码冻结 `4ef6b05`，最终源码/标签 `ea5a852`；Release ID `456354972` 于 2026-11-24 15:56:30（Asia/Shanghai）正式公开并设 Latest，23 份附件远端摘要与匿名入口通过。
+- 用户明确下载与播放顺序为“先 V8/当前 App 官方取源，失败后再走 SDK”，SDK 再失败才进入网页或旧接口。不得把 SDK 改回默认首选。
+- 合入 PR #189 的 SDK `--serve` 会话复用与 #190 的批量多分集取源；批量仅用于同一内容类型的数字分集，保留 8 集上限、2 分钟缓存、旧 helper 单集回退、部分/全部取消和前台播放优先级。
+- Electron 升级到 44.11.5；macOS 主程序、所有 Helper、SDK helper 均使用 hardened runtime entitlements，普通 LaunchServices、DMG 内启动和打包应用真实 V8 两集静音播放通过。SDK `--serve` 失败必须立即回调；批量失败不得再起单集重复等待；V8/Windows 验收不得继续强制 `sourceProvider=sdk`。Windows 最终两集记录 `official`，Linux 两集 1080P 静音播放通过。
+
 ## 8.1 播放取源与下载提速发行（2026-11-23）
 
 - 本轮从公开 8.0 按“逢 9 进 1”升级为 8.1，内部 8.1.0、桌面构建 8.1.1。

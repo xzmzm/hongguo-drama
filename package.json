@@ -1,6 +1,6 @@
 {
   "name": "hongguo-downloader",
-  "version": "8.1.0",
+  "version": "8.2.0",
   "description": "红果短剧播放与下载",
   "main": "main.js",
   "license": "GPL-3.0",
@@ -21,8 +21,9 @@
     "build:mac:dir": "node scripts/setup-ffmpeg-mac.js arm64 x64 && npm run build:react && electron-builder --mac --arm64 --x64 --dir --publish never",
     "test": "node scripts/test.cjs",
     "setup:software": "node scripts/setup-software-player.cjs",
-    "predev": "node scripts/setup-software-player.cjs",
-    "prebuild:react": "node scripts/setup-software-player.cjs",
+    "setup:sdk:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-sdk-playback-win.ps1",
+    "predev": "npm run setup:software",
+    "prebuild:react": "npm run setup:software",
     "build:linux": "npm run build:react && node scripts/check-linux-media.cjs && electron-builder --linux AppImage --x64 --publish never"
   },
   "dependencies": {
@@ -34,7 +35,7 @@
     "@libmedia/avplayer": "1.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^8.2.2",
-    "electron": "44.9.1",
+    "electron": "44.11.5",
     "electron-builder": "26.15.3",
     "esbuild": "0.21.5",
     "js-yaml": "4.3.2",
@@ -59,15 +60,18 @@
       "main.js",
       "preload.js",
       "dist-react/**/*",
-      "build/sdk-playback/**/*",
+      "build/sdk-playback/darwin-*/hongguo-sdk-playback",
+      "build/sdk-playback/win32-x64/hongguo-sdk-playback.exe",
+      "build/sdk-playback/README.txt",
       "src/native/**/*",
       "src/store.js"
     ],
     "asar": true,
     "asarUnpack": [
-      "build/sdk-playback/**/*"
+      "build/sdk-playback/**/*",
+      "build/sdk-playback/win32-x64/**"
     ],
-    "artifactName": "hongguo-downloader-8.1-${os}-${arch}.${ext}",
+    "artifactName": "hongguo-downloader-8.2-${os}-${arch}.${ext}",
     "win": {
       "target": [
         {
@@ -111,7 +115,7 @@
       ]
     },
     "portable": {
-      "artifactName": "${productName}-8.1-便携版.${ext}"
+      "artifactName": "${productName}-8.2-便携版.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -119,7 +123,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "红果短剧下载器",
-      "artifactName": "hongguo-downloader-8.1-win-x64-setup.${ext}"
+      "artifactName": "hongguo-downloader-8.2-win-x64-setup.${ext}"
     },
     "mac": {
       "target": [
@@ -234,7 +238,7 @@
         }
       ],
       "syncDesktopName": true,
-      "artifactName": "hongguo-downloader-8.1-linux-x64.${ext}",
+      "artifactName": "hongguo-downloader-8.2-linux-x64.${ext}",
       "extraFiles": [
         {
           "from": "build/linux-AppRun.sh",
@@ -245,7 +249,7 @@
     "appImage": {
       "executableArgs": []
     },
-    "buildVersion": "8.1.1"
+    "buildVersion": "8.2.1"
   },
   "engines": {
     "node": ">=22.12"

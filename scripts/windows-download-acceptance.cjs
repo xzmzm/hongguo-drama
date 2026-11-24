@@ -52,6 +52,7 @@ module.exports = async function checkDownloads({ evaluate, result, dataFile, med
   const receipt = result.appDownloadQueue = { tested: false, seriesId: series.series_id, episodes: expected, maxConcurrent: 1, phases: [], temporaryIdentities: [], media: [] };
   const appInfo = await api('window.electronAPI.getAppInfo()');
   assert.equal(appInfo.configMode, 'portable');
+  assert.equal(appInfo.sdkPlaybackAvailable, true, 'Portable application must expose the packaged Windows SDK helper');
   assert.equal(path.resolve(appInfo.dataDir).toLowerCase(), path.resolve(path.dirname(dataFile)).toLowerCase());
   const staleTasks = await api('window.electronAPI.getDownloadTasks()');
   await api('window.electronAPI.pauseAll()');
@@ -132,6 +133,10 @@ module.exports = async function checkDownloads({ evaluate, result, dataFile, med
   receipt.seriesEpisodes = seriesEpisodes.data.episodes
     .filter(episode => expected.includes(episode.vid_index))
     .map(episode => ({ index: episode.vid_index, status: episode.status, fileUrl: episode.fileUrl }));
+  receipt.sourceProviders = tasks.map(task => ({ index: task.hongguoInfo.vid_index,
+    provider: task.sourceProvider || '', sdkFailure: task.sdkFailure || null }));
+  assert.equal(receipt.sourceProviders.every(item => ['official', 'sdk'].includes(item.provider)), true,
+    'Fresh Windows acceptance downloads must record the actual V8/official or SDK provider: ' + JSON.stringify(receipt.sourceProviders));
   const files = [];
   for (const episode of episodes) {
     const task = tasks.find(task => task.hongguoInfo.vid === episode.vid);
@@ -205,7 +210,7 @@ module.exports = async function checkDownloads({ evaluate, result, dataFile, med
     trial.settingRestored = true;
   }
   receipt.tested = true;
-  result.checks.push('Final portable EXE native IPC: real two-episode queue, persistent pause/resume and reversed batch retry start/complete in episode order; completed tasks rebind to playable episode capabilities; exact temporary identities match disk, full media probes/decodes and cleans up');
+  result.checks.push('Final portable EXE native IPC: real two-episode queue used packaged SDK for both downloads; persistent pause/resume and reversed batch retry started/completed in episode order; completed tasks rebind to playable episode capabilities; exact temporary identities match disk, full media probes/decodes and cleans up');
   delete result.stage;
   return files;
 };

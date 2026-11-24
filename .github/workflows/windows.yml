@@ -103,10 +103,33 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/cache@v4
+        id: sdk-playback-cache
+        with:
+          path: build/sdk-playback/win32-x64/hongguo-sdk-playback.exe
+          key: windows-sdk-playback-${{ hashFiles('scripts/build-sdk-playback-win.ps1', 'scripts/sdk-playback/resolve_cli.py', 'scripts/sdk-playback/vendor/**') }}
+      - name: Build Windows x64 SDK playback helper
+        if: ${{ steps.sdk-playback-cache.outputs.cache-hit != 'true' }}
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/build-sdk-playback-win.ps1
+      - name: Verify Windows x64 SDK playback helper starts
+        if: ${{ !inputs.build_only }}
+        shell: pwsh
+        run: |
+          $help = (& build/sdk-playback/win32-x64/hongguo-sdk-playback.exe --help 2>&1 | Out-String)
+          if ($LASTEXITCODE -or $help -notmatch '--video') { throw 'Windows SDK playback helper verification failed' }
+          Write-Output 'PASS Windows x64 SDK playback helper starts and exposes CLI options'
       - if: ${{ !inputs.build_only }}
         run: npm ci --no-audit --no-fund
       - if: ${{ inputs.build_only }}
         run: npm ci --no-audit --no-fund --ignore-scripts
+      - name: Verify Windows SDK helper resolves a real episode
+        if: ${{ !inputs.build_only }}
+        shell: pwsh
+        run: node scripts/check-windows-sdk-playback.cjs build/sdk-playback/win32-x64/hongguo-sdk-playback.exe
       - run: node scripts/prepare-electron.cjs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -127,7 +150,7 @@ jobs:
       - name: Run playback source regression checks
         if: ${{ !inputs.build_only }}
         run: |
-          node --test src/native/playback-v5.test.cjs src/native/app-source-pacing.test.cjs src/native/app-source-video-tab.test.cjs src/native/app-source-inline-fallback.test.cjs src/native/github-127-diagnostics.test.cjs src/native/github-127-handoff.test.cjs src/native/github-127-transport.test.cjs src/native/hongguo-cancellation.test.cjs src/native/playback-device.test.cjs src/native/playback-signature.test.cjs
+          node --test src/native/playback-v5.test.cjs src/native/app-source-pacing.test.cjs src/native/app-source-video-tab.test.cjs src/native/app-source-inline-fallback.test.cjs src/native/github-127-diagnostics.test.cjs src/native/github-127-handoff.test.cjs src/native/github-127-transport.test.cjs src/native/hongguo-cancellation.test.cjs src/native/playback-device.test.cjs src/native/playback-signature.test.cjs src/native/sdk-playback.test.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/check-app-source.cjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -145,7 +168,7 @@ jobs:
             dist/*.exe
             dist/*.yml
             dist/*.blockmap
-          key: windows-update-v2-${{ github.sha }}-${{ hashFiles('package*.json', 'main.js', 'preload.js', 'index.html', 'vite.config.js', 'src/**', 'build/**', 'scripts/build-ffmpeg-source-win.sh', 'scripts/build-librempeg-source.sh', 'scripts/librempeg-videotoolbox-prototype.patch', 'scripts/prepare-nv-codec-headers.sh', 'scripts/prepare-amf-headers.sh', 'scripts/setup-software-player.cjs', 'scripts/software-player-assets.json') }}
+          key: windows-update-v3-${{ github.sha }}-${{ hashFiles('package*.json', 'main.js', 'preload.js', 'index.html', 'vite.config.js', 'src/**', 'build/**', 'scripts/build-ffmpeg-source-win.sh', 'scripts/build-librempeg-source.sh', 'scripts/build-sdk-playback-win.ps1', 'scripts/sdk-playback/**', 'scripts/librempeg-videotoolbox-prototype.patch', 'scripts/prepare-nv-codec-headers.sh', 'scripts/prepare-amf-headers.sh', 'scripts/setup-software-player.cjs', 'scripts/software-player-assets.json') }}
       - shell: pwsh
         if: ${{ inputs.build_only || steps.app-cache.outputs.cache-hit != 'true' }}
         run: |
@@ -155,6 +178,17 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Verify packaged Windows SDK playback helper
+        shell: pwsh
+        run: |
+          $base = 'dist/win-unpacked/resources/app.asar.unpacked/build/sdk-playback'
+          $exe = Join-Path $base 'win32-x64/hongguo-sdk-playback.exe'
+          if (-not (Test-Path $exe -PathType Leaf)) { throw "Packaged SDK helper missing: $exe" }
+          $stray = Get-ChildItem $base -Directory | Where-Object { $_.Name -like 'venv-*' -or $_.Name -like 'build-*' -or $_.Name -eq 'source' }
+          if ($stray) { throw "SDK build intermediates leaked into the package: $($stray.Name -join ', ')" }
+          $help = (& $exe --help 2>&1 | Out-String)
+          if ($LASTEXITCODE -or $help -notmatch '--video') { throw 'Packaged SDK playback helper failed to start' }
+          Write-Output 'PASS packaged Windows SDK playback helper present, clean and runnable'
       - uses: actions/cache/save@v4
         if: ${{ !inputs.build_only && steps.app-cache.outputs.cache-hit != 'true' }}
         with:

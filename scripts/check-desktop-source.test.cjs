@@ -97,12 +97,41 @@ test('existing playInfo keeps the original no-lookup path and cleans job listene
     assert.equal(h.lookups.length, 0); assert.equal(getEventListeners(parent.signal, 'abort').length, 0);
 });
 
-test('SDK-first download preference reaches the provider lookup', async t => {
+test('parallel SDK-first download preference reaches the provider lookup', async t => {
     const h = desktop(t), parent = h.controller();
-    const result = outcome(h.recover('11', '100', { ...opts(parent.signal), preferSdk: true },
+    const result = outcome(h.recover('11', '100', { ...opts(parent.signal), preferSdk: true, parallelSdk: true },
         async candidate => candidate.url));
     await turn();
     assert.equal(h.lookups[0].preferSdk, true);
+    assert.equal(h.lookups[0].parallelSdk, true);
     h.calls[0].resolve(info('11'));
     assert.equal((await result).value, info('11').url);
+});
+
+test('desktop downloads use V8-first lookup and pass SDK batch fallback metadata', async t => {
+    const h = desktop(t);
+    const task = h.add('11', '11');
+    task.hongguoInfo.content_type = '1001';
+    h.state.load = async (vid, options) => { h.lookups.push(options); return info(vid); };
+    await h.run('executeHongguoDownload(downloadTasks[0])');
+    assert.equal(task.status, 'completed', task.error);
+    assert.equal(h.lookups[0].preferSdk, false);
+    assert.equal(h.lookups[0].parallelSdk, false);
+    assert.equal(h.lookups[0].sdkPriority, false);
+    assert.equal(h.lookups[0].sdkBatchVids[0], '11');
+    assert.equal(h.lookups[0].content_type, '1001');
+});
+
+test('Hongguo online playback uses official sources first with SDK fallback priority', async t => {
+    const h = desktop(t);
+    const pending = h.handlers['prepare-online-play']({}, {
+        vid: '11', seriesId: '100', vidIndex: 1, requestId: 'official-online', quality: 'auto', contentType: '1001',
+    });
+    await turn();
+    assert.equal(h.lookups[0].preferSdk, false);
+    assert.equal(h.lookups[0].parallelSdk, false);
+    assert.equal(h.lookups[0].sdkPriority, true);
+    assert.equal(h.lookups[0].content_type, '1001');
+    h.calls[0].resolve(info('11'));
+    assert.equal((await pending).success, true);
 });
