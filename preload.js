@@ -1,4 +1,4 @@
-// 红果短剧 8.2：版本及发行状态见 package.json 和 docs/release-8.2.md。
+// 红果短剧 8.3：版本及发行状态见 package.json 和 docs/release-8.3.md。
 // 红果短剧 6.2：桌面桥接入口，发行说明见 docs/release-6.0.md。
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -36,6 +36,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (_event, preferences) => cb(preferences);
     ipcRenderer.on('announcement-preferences-changed', listener);
     return () => ipcRenderer.removeListener('announcement-preferences-changed', listener);
+  },
+  getSourcePackStatus: () => ipcRenderer.invoke('get-source-pack-status'),
+  setSourcePackEnabled: enabled => ipcRenderer.invoke('set-source-pack-enabled', enabled),
+  checkSourcePack: () => ipcRenderer.invoke('check-source-pack'),
+  rollbackSourcePack: () => ipcRenderer.invoke('rollback-source-pack'),
+  getPlaybackSourceOrder: () => ipcRenderer.invoke('get-playback-source-order'),
+  setPlaybackSourceOrder: order => ipcRenderer.invoke('set-playback-source-order', order),
+  onSourcePackStatus: cb => {
+    const listener = (_event, status) => cb(status);
+    ipcRenderer.on('source-pack-status', listener);
+    return () => ipcRenderer.removeListener('source-pack-status', listener);
   },
   checkAppUpdate: () => ipcRenderer.invoke('check-app-update'),
   openAppUpdate: () => ipcRenderer.invoke('open-app-update'),
@@ -172,6 +183,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelAccountLogin: (loginId) => ipcRenderer.invoke('cancel-account-login', loginId),
   logoutAccount: () => ipcRenderer.invoke('logout-account'),
   getAccountHistory: (options) => ipcRenderer.invoke('get-account-history', options),
+  getAccountFavorites: () => ipcRenderer.invoke('get-account-favorites'),
+  playAccountFavorite: (seriesId) => ipcRenderer.invoke('play-account-favorite', seriesId),
   playAccountHistory: (seriesId) => ipcRenderer.invoke('play-account-history', seriesId),
   onAccountUpdated: (cb) => {
     const listener = (_event, data) => cb(data);
