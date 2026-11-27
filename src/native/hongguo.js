@@ -271,9 +271,49 @@ async function fetchSiteHtml(url, timeout = 30000, signal, { trustedOfficialDns 
  * 2026-11-23 App 播放模型全链路返回 200/0 字节时，官网仍能通过该接口
  * 获取当前公开分集的完整 360p MP4。它不是 SEO 页里的 10 秒预览。
  */
-async function fetchPublicFallbackPlayUrl(vid, signal) {
+const episodeIndexByVid = new Map();
+const MAX_EPISODE_INDEX_CACHE = 4096;
+
+function rememberEpisodeIndices(list) {
+  const sid = String(list?.series_id || '');
+  if (!/^\d{1,30}$/.test(sid) || !Array.isArray(list?.episodes)) return list;
+  for (const ep of list.episodes) {
+    const vid = String(ep?.vid || '');
+    const idx = Number(ep?.vid_index);
+    if (!/^\d{1,30}$/.test(vid) || !Number.isSafeInteger(idx) || idx < 1) continue;
+    const key = `${sid}:${vid}`;
+    episodeIndexByVid.delete(key);
+    episodeIndexByVid.set(key, idx);
+  }
+  while (episodeIndexByVid.size > MAX_EPISODE_INDEX_CACHE) {
+    episodeIndexByVid.delete(episodeIndexByVid.keys().next().value);
+  }
+  return list;
+}
+
+async function fetchWebPublicTokens(sid, signal) {
+  if (!/^\d{1,30}$/.test(String(sid || ''))) return [];
+  return cachedRequest(`web-tokens:${sid}`, 300000, async (reqSignal) => {
+    const html = await fetchSiteHtml(`${SITE_ORIGIN}/player/${encodeURIComponent(sid)}`, 4000, reqSignal);
+    throwIfAborted(reqSignal);
+    const router = require('./catalog').readRouterData(html);
+    const data = router.loaderData?.['player_(series_id)/page']
+      ?? router.loaderData?.['player_(series_id)/(vid)/page']
+      ?? router.loaderData?.detail_page;
+    const detail = data?.seriesDetail;
+    if (!data || data.isSuccess === false || String(detail?.series_id || '') !== String(sid)
+        || !Array.isArray(detail?.vid_list)) {
+      return [];
+    }
+    return detail.vid_list.map(String);
+  }, { signal });
+}
+
+async function fetchPublicFallbackPlayUrl(vid, signal, canonicalVid = vid) {
   throwIfAborted(signal);
-  if (!/^\d{1,30}$/.test(String(vid))) return null;
+  const itemId = String(vid);
+  if (!/^(?:\d{1,30}|v\d+_[A-Za-z0-9_-]{8,128})$/.test(itemId)) return null;
+  if (typeof axios !== 'function') return null;
   const guarded = webMediaRequestOptions(PUBLIC_FALLBACK_PLAY_URL, { trustedOfficialDns: true });
   const response = await axios({
     ...guarded,
@@ -285,7 +325,7 @@ async function fetchPublicFallbackPlayUrl(vid, signal) {
       'Content-Type': 'application/json',
       Referer: WEB_REFERER,
     },
-    data: { item_id: String(vid) },
+    data: { item_id: itemId },
     timeout: 6000,
     maxRedirects: 0,
     responseType: 'json',
@@ -317,7 +357,7 @@ async function fetchPublicFallbackPlayUrl(vid, signal) {
     contentKey: null,
     codec: 'h264',
     source: 'web',
-    vid: String(vid),
+    vid: String(canonicalVid),
     quality: '360p',
     width: 360,
     height: 640,
@@ -354,6 +394,7 @@ function parseEpisodeListHtml(html, seriesId) {
   const accessible = detail.accessible_episode_cnt;
   const webAccessibleEpisodes = accessible != null && /^\d+$/.test(String(accessible))
     ? Math.min(Number(accessible), vids.length) : null;
+  const episodeCount = Number(detail.episode_cnt) || Number(detail.series_episode_info?.episode_cnt) || null;
 
   const episodes = vids.map((vid, i) => ({
     vid,
@@ -370,6 +411,8 @@ function parseEpisodeListHtml(html, seriesId) {
     series_title: seriesTitle,
     cover: cover || (episodes[0] && episodes[0].cover) || '',
     total: episodes.length,
+    episode_count: episodeCount,
+    complete: episodeCount == null || episodes.length >= episodeCount,
     web_accessible_episodes: webAccessibleEpisodes,
     episodes,
     source: 'web', // 标记来源，便于排查
@@ -394,6 +437,23 @@ async function fetchPlayUrlFromWeb(vid, sid, onFailure, signal) {
   } catch (error) {
     throwIfAborted(signal);
     if (error.code === 'PUBLIC_ACCESS_LIMITED') {
+      const epIndex = sid ? episodeIndexByVid.get(`${sid}:${vid}`) : null;
+      if (epIndex >= 1 && epIndex <= 10) {
+        try {
+          const tokens = await fetchWebPublicTokens(sid, signal);
+          const token = tokens[epIndex - 1];
+          if (typeof token === 'string' && /^v\d+_[A-Za-z0-9_-]{8,128}$/.test(token)) {
+            const tokenFallback = await fetchPublicFallbackPlayUrl(token, signal, vid);
+            if (tokenFallback) return tokenFallback;
+          }
+        } catch (tokenError) {
+          throwIfAborted(signal);
+          if (tokenError.code === 'PUBLIC_ACCESS_LIMITED') {
+            onFailure?.(tokenError);
+            return null;
+          }
+        }
+      }
       onFailure?.(error);
       return null;
     }
@@ -567,11 +627,14 @@ async function fetchEpisodeList(seriesId, options = {}) {
   return cachedRequest(`episodes:${seriesId}`, 60000,
     async () => {
       try {
-        return await fetchEpisodeListFresh(seriesId, { deadline: Number(options.deadline) || 0 });
+        return rememberEpisodeIndices(await fetchEpisodeListFresh(seriesId, {
+          deadline: Number(options.deadline) || 0,
+          content_type: options.content_type || options.contentType,
+        }));
       } catch (error) {
         if (!/^\d{1,30}$/.test(String(seriesId))) throw error;
         try {
-          return await require('./hongguo-creator-album').fetchCreatorAlbum(seriesId, { deadline: Date.now() + 5000 });
+          return rememberEpisodeIndices(await require('./hongguo-creator-album').fetchCreatorAlbum(seriesId, { deadline: Date.now() + 5000 }));
         } catch {
           throw error;
         }
@@ -645,10 +708,86 @@ async function fetchEpisodeListFromWeb(seriesId, deadline = 0) {
   }
 }
 
-async function fetchEpisodeListFresh(seriesId, { deadline = 0 } = {}) {
+const OPENHONGGUO_LIST_TIMEOUT_MS = 9000;
+const APP_DETAIL_LIST_TIMEOUT_MS = 9000;
+
+function describeListSourceError(error) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '');
+  if (code === 'ETIMEDOUT' || code === 'ECONNABORTED' || code === 'TIMEOUT' || error?.name === 'TimeoutError'
+      || /超时|timeout/i.test(message)) {
+    return '请求超时';
+  }
+  if (code === 'ERR_CANCELED' || /aborted|canceled/i.test(message)) {
+    return '加载超时或连接中断';
+  }
+  if (code === 'ANONYMOUS_LIMITED') return '匿名设备暂时受限';
+  if (code === 'DEVICE_REJECTED') return '匿名设备被拒';
+  if (code === 'DEVICE_REGISTRATION_FAILED') return '匿名设备注册失败';
+  if (code === 'RATE_LIMITED') return '请求过于频繁';
+  if (code === 'BUSINESS_REJECTED') return '接口暂时拒绝请求';
+  if (code === 'EMPTY_RESPONSE') return '接口返回空响应';
+  if (code === 'SECURITY_BLOCKED') return '请求被安全校验阻止';
+  if (code === 'INVALID_OPTIONS') return '剧集编号无效';
+  if (code === 'INVALID_RESPONSE') return '分集列表不完整或数据异常';
+  if (code === 'CONTENT_UNAVAILABLE') return '剧集暂不可用';
+  if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'EPIPE', 'ERR_NETWORK', 'TRANSPORT'].includes(code)) {
+    return '网络连接失败';
+  }
+  return '暂不可用';
+}
+
+async function fetchEpisodeListFresh(seriesId, { deadline = 0, content_type } = {}) {
+  let sdkError;
+  const remaining = deadline ? deadline - Date.now() : OPENHONGGUO_LIST_TIMEOUT_MS;
+  if (deadline && remaining <= 0) {
+    sdkError = Object.assign(new Error('请求超时'), { code: 'ETIMEDOUT' });
+  } else {
+    const sdkTimeout = deadline
+      ? Math.min(OPENHONGGUO_LIST_TIMEOUT_MS, Math.max(1, Math.floor(remaining * 0.5)))
+      : OPENHONGGUO_LIST_TIMEOUT_MS;
+    const budget = boundedSignal(undefined, sdkTimeout);
+    try {
+      return await require('./openhongguo-source').fetchEpisodeList(seriesId, {
+        deadline,
+        content_type,
+        signal: budget.signal,
+      });
+    } catch (error) {
+      sdkError = budget.signal.aborted ? abortError(budget.signal) : error;
+    } finally {
+      budget.dispose();
+    }
+  }
+  let appError = null;
+  const appSource = require('./app-source');
+  if (typeof appSource?.fetchAppEpisodeList === 'function') {
+    const appRemaining = deadline ? deadline - Date.now() : APP_DETAIL_LIST_TIMEOUT_MS;
+    if (deadline && appRemaining <= 0) {
+      appError = Object.assign(new Error('请求超时'), { code: 'ETIMEDOUT' });
+    } else {
+      const appTimeout = deadline
+        ? Math.min(APP_DETAIL_LIST_TIMEOUT_MS, Math.max(1, Math.floor(appRemaining * 0.6)))
+        : APP_DETAIL_LIST_TIMEOUT_MS;
+      const appBudget = boundedSignal(undefined, appTimeout);
+      try {
+        return await appSource.fetchAppEpisodeList(seriesId, {
+          deadline: Date.now() + appTimeout,
+          content_type,
+          signal: appBudget.signal,
+        });
+      } catch (error) {
+        appError = appBudget.signal.aborted ? abortError(appBudget.signal) : error;
+      } finally {
+        appBudget.dispose();
+      }
+    }
+  }
   let webError;
   try {
-    return await fetchEpisodeListFromWeb(seriesId, deadline);
+    const web = await fetchEpisodeListFromWeb(seriesId, deadline);
+    if (web.complete !== false) return web;
+    webError = new Error(`官网仅返回 ${web.episodes.length}/${web.episode_count} 集预览`);
   } catch (error) {
     webError = error;
   }
@@ -661,7 +800,8 @@ async function fetchEpisodeListFresh(seriesId, { deadline = 0 } = {}) {
   try {
     j = await apiCall("/novel/player/multi_video_detail/preload/v1", body, 3, 25000, deadline);
   } catch (e) {
-    throw new Error(`获取分集失败：官网数据源（${webError.message}），备用接口（${e.message}）`);
+    const appPart = appError ? `，App详情（${describeListSourceError(appError)}）` : '';
+    throw new Error(`获取分集失败：openhongguo（${describeListSourceError(sdkError)}）${appPart}，官网数据源（${webError.message}），备用接口（${e.message}）`);
   }
   if (!j || j.code !== 0) {
     throw new Error("detail API 失败: " + JSON.stringify(j || {}).slice(0, 200));
