@@ -9,6 +9,7 @@ const skip = new Set([
   'check-windows-release.cjs',
   'check-windows-installer.cjs',
   'check-windows-sdk-playback.cjs',
+  'check-sdk-playback.cjs', // packaging guard: needs locally built SDK helpers
   'check-hls-media.cjs',
   'check-download-media-validity.cjs',
   'check-ffmpeg-mac.cjs',
